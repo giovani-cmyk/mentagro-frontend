@@ -2,7 +2,7 @@
 // @ts-nocheck
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from './services/supabase'; // Importando a conexão real
+import { supabase } from './services/api'; // Importando a conexão real
 import Sidebar from './components/Sidebar';
 import InboxScreen from './components/InboxScreen';
 import LoginScreen from './components/LoginScreen';

@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Essas chaves virão do arquivo .env (vamos criar no próximo passo)
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Colocamos as chaves direto aqui para garantir que funciona
+const supabaseUrl = 'https://zddovgcgmjznhlgzehzi.supabase.co';
+const supabaseKey = 'sb_publishable_1nTzm2xbNz_9DJ1za5KLdA_onfNzLCS';
 
 export const supabase = createClient(supabaseUrl, supabaseKey);

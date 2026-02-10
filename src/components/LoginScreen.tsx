@@ -13,15 +13,38 @@ export default function LoginScreen({ onLogin }) {
     setError('');
     setIsLoading(true);
 
-    // Simulação de verificação de segurança
+    // Simulação de verificação de segurança (fake API delay)
     setTimeout(() => {
-      // LOGIN MASTER (Suas credenciais)
-      if (email === 'giovani@apicedobrasil.com.br' && password === '@lfanumericA14') {
-        onLogin({
+      
+      // 👇 LISTA DE USUÁRIOS PERMITIDOS
+      const validUsers = [
+        {
           id: 'master-01',
           name: 'Giovani',
-          role: 'Admin Master',
-          avatar: 'https://ui-avatars.com/api/?name=Giovani&background=0D8ABC&color=fff'
+          email: 'giovani@apicedobrasil.com.br',
+          password: '@lfanumericA14',
+          role: 'Admin Master'
+        },
+        {
+          id: 'admin-02',
+          name: 'Jefferson Silva',
+          email: 'jeffersonsilva857@gmail.com',
+          password: 'A1b2c3d4e5@',
+          role: 'Analista'
+        }
+      ];
+
+      // Busca na lista se existe alguém com esse email E senha
+      const foundUser = validUsers.find(u => u.email === email && u.password === password);
+
+      if (foundUser) {
+        // Se achou, faz o login
+        onLogin({
+          id: foundUser.id,
+          name: foundUser.name,
+          role: foundUser.role,
+          // Gera o avatar automaticamente com as iniciais
+          avatar: `https://ui-avatars.com/api/?name=${foundUser.name}&background=0D8ABC&color=fff`
         });
       } else {
         setError('Acesso negado. Verifique suas credenciais.');
@@ -54,7 +77,7 @@ export default function LoginScreen({ onLogin }) {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
-                placeholder="nome@apicedobrasil.com.br"
+                placeholder="nome@empresa.com"
               />
             </div>
             <div>

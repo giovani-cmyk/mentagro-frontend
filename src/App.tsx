@@ -4,9 +4,10 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './services/api';
 import Sidebar from './components/Sidebar';
-import TicketList from './components/TicketList'; // Mudamos de InboxScreen para TicketList
+import TicketList from './components/TicketList';
 import LoginScreen from './components/LoginScreen';
 import TicketDetail from './components/TicketDetail';
+import AnalyticsDashboard from './components/AnalyticsDashboard'; // 1. Importando o novo painel
 
 function App() {
   const [user, setUser] = useState(null);
@@ -19,18 +20,17 @@ function App() {
   const [interactions, setInteractions] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // 👇 MÁGICA ATUALIZADA: Busca dados incluindo novos campos
   useEffect(() => {
     async function fetchData() {
       if (!user) return;
 
       setLoading(true);
       
-      // Buscamos os tickets (removendo os que o BOT já resolveu sozinho)
+      // 2. BUSCA GLOBAL: Removemos o filtro 'neq' para que o Analytics veja TUDO
+      // O filtro de "esconder o robô" agora será feito apenas na visualização da Inbox
       const { data: ticketsData } = await supabase
         .from('tickets')
         .select('*')
-        .neq('status', 'BOT_REPLIED') // Filtro para não poluir o transbordo humano
         .order('created_at', { ascending: false });
       
       const { data: ordersData } = await supabase.from('orders').select('*');
@@ -46,7 +46,7 @@ function App() {
     }
 
     fetchData();
-  }, [user, currentView]); // Recarrega quando volta para a inbox
+  }, [user, currentView]);
 
   const handleOpenTicket = (ticketId) => {
     setSelectedTicketId(ticketId);
@@ -67,7 +67,6 @@ function App() {
       );
     }
 
-    // TELA DE DETALHE (CHAT)
     if (currentView === 'ticket_detail' && selectedTicketId) {
       const ticket = tickets.find(t => t.id === selectedTicketId);
       const order = orders.find(o => o.id === ticket?.order_id);
@@ -90,17 +89,22 @@ function App() {
       );
     }
 
-    // TELA DE LISTAGEM COM AS NOVAS ABAS
+    // 3. TELA DE ANALÍTICOS: Agora com dados reais passados via props
+    if (currentView === 'analiticos') {
+      return <AnalyticsDashboard tickets={tickets} />;
+    }
+
     if (currentView === 'inbox') {
+      // 4. FILTRO DA INBOX: Aqui filtramos para o humano não ver o que o BOT já resolveu
+      const inboxTickets = tickets.filter(t => t.status !== 'BOT_REPLIED');
       return (
         <TicketList 
-          tickets={tickets} 
+          tickets={inboxTickets} 
           onSelectTicket={(ticket) => handleOpenTicket(ticket.id)} 
         />
       );
     }
 
-    // TELA DE LOJAS
     if (currentView === 'lojas') {
       return (
         <div className="flex items-center justify-center h-full text-slate-400">
@@ -113,16 +117,14 @@ function App() {
       );
     }
     
-    return <div className="p-10 text-slate-500">Em construção...</div>;
+    return <div className="p-10 text-slate-500 text-center">Opção não encontrada no menu.</div>;
   };
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans">
-      {/* Sidebar só aparece se não estiver no detalhe do ticket */}
       {currentView !== 'ticket_detail' && (
         <Sidebar 
           user={user} 
-          // O contador da sidebar foca apenas no que está REALMENTE aberto (PENDING_HUMAN)
           pendingCount={tickets.filter(t => t.status === 'PENDING_HUMAN').length}
           currentView={currentView}
           onNavigate={setCurrentView}

@@ -4,134 +4,124 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/api';
 
 export default function AutomationScreen() {
-  const [prompt, setPrompt] = useState('');
+  const [data, setData] = useState({ padrão: [], personalizadas: [] });
   const [isOnline, setIsOnline] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Template do Checklist para facilitar o preenchimento
-  const checklistTemplate = `* [ ] TOM DE VOZ: (Ex: Amigável e focado em vendas)
-* [ ] POLÍTICA DE TROCA: (Ex: 7 dias, etiqueta intacta)
-* [ ] PRAZOS DE POSTAGEM: (Ex: Até 48h úteis)
-* [ ] FRETE E ENTREGAS: (Ex: Grátis acima de R$199)
-* [ ] CANAL DE TRANSBORDO: (Ex: Casos de cancelamento passar para humano)
-* [ ] PROTOCOLO DE FECHAMENTO: (Ex: Perguntar se a dúvida foi sanada)`;
-
   useEffect(() => {
     loadSettings();
-    const interval = setInterval(loadSettings, 30000);
-    return () => clearInterval(interval);
   }, []);
 
   async function loadSettings() {
-    const { data } = await supabase.from('settings').select('*').eq('id', 1).single();
-    if (data) {
-      setPrompt(data.bot_prompt || '');
-      const lastSeen = new Date(data.last_seen);
-      const now = new Date();
-      const diffInMinutes = (now - lastSeen) / 1000 / 60;
+    const { data: res } = await supabase.from('settings').select('*').eq('id', 1).single();
+    if (res && res.bot_prompt) {
+      setData(typeof res.bot_prompt === 'string' ? JSON.parse(res.bot_prompt) : res.bot_prompt);
+      const lastSeen = new Date(res.last_seen);
+      const diffInMinutes = (new Date() - lastSeen) / 1000 / 60;
       setIsOnline(diffInMinutes < 5);
     }
   }
 
-  const handleSave = async () => {
-    setSaving(true);
-    const { error } = await supabase
-      .from('settings')
-      .update({ bot_prompt: prompt, updated_at: new Date() })
-      .eq('id', 1);
-    
-    if (!error) alert("Manual do Robô atualizado com sucesso!");
-    setSaving(false);
+  const handleUpdateField = (type, id, value) => {
+    const newData = { ...data };
+    const field = newData[type].find(f => f.id === id);
+    if (field) field.content = value;
+    setData(newData);
   };
 
-  const applyTemplate = () => {
-    if (window.confirm("Deseja aplicar o template de checklist? Isso não apagará o que você já escreveu, apenas adicionará ao final.")) {
-      setPrompt(prev => prev + "\n\n" + checklistTemplate);
-    }
+  const handleAddCustom = () => {
+    const newData = { ...data };
+    const newId = Date.now();
+    newData.personalizadas.push({ id: newId, label: 'Nova Instrução', content: '' });
+    setData(newData);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    const { error } = await supabase.from('settings').update({ bot_prompt: data }).eq('id', 1);
+    if (!error) alert("Cérebro da IA atualizado!");
+    setSaving(false);
   };
 
   return (
     <div className="p-8 bg-slate-50 h-full overflow-y-auto">
-      <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-          <span className="material-symbols-outlined text-blue-600">smart_toy</span>
-          Automação & IA
-        </h1>
-
-        {/* Status do Robô */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 mb-8 flex justify-between items-center">
-          <div>
-            <h3 className="font-bold text-slate-700">Status do Robô</h3>
-            <div className={`flex items-center gap-2 font-bold ${isOnline ? 'text-green-600' : 'text-red-500'}`}>
-              <span className={`h-3 w-3 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
-              {isOnline ? 'IA Operacional' : 'IA Offline'}
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="text-xs text-slate-400 uppercase font-bold">Tecnologia</p>
-            <p className="text-sm font-medium">Gemini 1.5 Pro + n8n</p>
+      <div className="max-w-4xl mx-auto pb-24">
+        <div className="flex justify-between items-center mb-10">
+          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+            <span className="material-symbols-outlined text-blue-600">psychology</span>
+            Automação & IA
+          </h1>
+          <div className={`px-4 py-1 rounded-full text-xs font-bold flex items-center gap-2 ${isOnline ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+            <span className={`h-2 w-2 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
+            {isOnline ? 'IA OPERACIONAL' : 'IA DESCONECTADA'}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* COLUNA 1: Checklist de Referência */}
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-fit">
-            <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <span className="material-symbols-outlined text-amber-500">fact_check</span>
-              Checklist de Sucesso
-            </h3>
-            <ul className="space-y-4">
-              {[
-                { label: 'Tom de Voz', desc: 'Define a personalidade' },
-                { label: 'Trocas e Devoluções', desc: 'Evita confusão jurídica' },
-                { label: 'Prazos de Entrega', desc: 'Gere a expectativa' },
-                { label: 'Promoções Ativas', desc: 'Ajuda a vender mais' },
-                { label: 'Regras de Transbordo', desc: 'Quando chamar você' }
-              ].map((item, idx) => (
-                <li key={idx} className="flex gap-3">
-                  <span className="material-symbols-outlined text-green-500 text-sm">check_circle</span>
-                  <div>
-                    <p className="text-sm font-bold text-slate-700">{item.label}</p>
-                    <p className="text-xs text-slate-500">{item.desc}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            <button 
-              onClick={applyTemplate}
-              className="w-full mt-6 py-2 px-4 border-2 border-dashed border-slate-200 text-slate-500 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all"
-            >
-              + Inserir Template no Texto
+        {/* CAMPOS OBRIGATÓRIOS (FICAM VERDES AO PREENCHER) */}
+        <div className="mb-12">
+          <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6">Campos Obrigatórios</h2>
+          <div className="grid grid-cols-1 gap-4">
+            {data.padrão.map(field => (
+              <div key={field.id} className={`bg-white p-6 rounded-2xl border-2 transition-all duration-500 ${field.content.length > 3 ? 'border-green-500 shadow-lg shadow-green-500/10' : 'border-slate-100'}`}>
+                <div className="flex justify-between items-center mb-3">
+                  <label className="text-xs font-black text-slate-500 uppercase">{field.label}</label>
+                  {field.content.length > 3 && <span className="text-green-500 material-symbols-outlined text-sm">check_circle</span>}
+                </div>
+                <textarea 
+                  className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                  rows="2"
+                  value={field.content}
+                  onChange={(e) => handleUpdateField('padrão', field.id, e.target.value)}
+                  placeholder={`Insira as informações de ${field.label.toLowerCase()}...`}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* INSTRUÇÕES PERSONALIZADAS */}
+        <div className="mb-12">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest">Instruções Personalizadas</h2>
+            <button onClick={handleAddCustom} className="bg-blue-50 text-blue-600 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-blue-100 transition-all">
+              <span className="material-symbols-outlined text-sm">add</span> Adicionar Instrução
             </button>
           </div>
-
-          {/* COLUNA 2: Editor da Base de Conhecimento */}
-          <div className="lg:col-span-2 bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
-            <h3 className="font-bold text-slate-800 mb-2">Base de Conhecimento</h3>
-            <p className="text-sm text-slate-500 mb-6">Mantenha as informações abaixo sempre atualizadas para a IA.</p>
-            
-            <textarea 
-              className="w-full h-96 p-5 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm leading-relaxed bg-slate-50/30 font-mono"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Cole o template ou escreva as regras aqui..."
-            />
-            
-            <div className="flex justify-between items-center mt-6">
-              <p className="text-xs text-slate-400">
-                <span className="material-symbols-outlined text-xs align-middle">info</span>
-                O robô lê estas regras a cada nova mensagem.
-              </p>
-              <button 
-                onClick={handleSave}
-                disabled={saving}
-                className="px-8 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center gap-2 shadow-lg shadow-blue-600/20"
-              >
-                {saving ? 'Salvando...' : 'Salvar Manual'}
-                <span className="material-symbols-outlined">save</span>
-              </button>
-            </div>
+          
+          <div className="space-y-4">
+            {data.personalizadas.map(field => (
+              <div key={field.id} className={`bg-white p-6 rounded-2xl border-2 transition-all ${field.content.length > 3 ? 'border-green-500' : 'border-slate-100'}`}>
+                <input 
+                  className="text-sm font-bold text-blue-600 mb-3 bg-transparent border-b border-dashed border-blue-200 focus:border-blue-600 outline-none w-full pb-1"
+                  value={field.label}
+                  onChange={(e) => {
+                    const newData = {...data};
+                    newData.personalizadas.find(f => f.id === field.id).label = e.target.value;
+                    setData(newData);
+                  }}
+                />
+                <textarea 
+                  className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                  rows="2"
+                  value={field.content}
+                  onChange={(e) => handleUpdateField('personalizadas', field.id, e.target.value)}
+                  placeholder="Escreva a instrução personalizada aqui..."
+                />
+              </div>
+            ))}
           </div>
+        </div>
+
+        {/* BOTÃO SALVAR FIXO */}
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 w-full max-w-4xl px-8">
+          <button 
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold shadow-2xl hover:bg-blue-600 transition-all flex items-center justify-center gap-3 active:scale-95"
+          >
+            {saving ? 'Sincronizando...' : 'Atualizar Cérebro da IA'}
+            <span className="material-symbols-outlined">bolt</span>
+          </button>
         </div>
       </div>
     </div>

@@ -7,7 +7,8 @@ import TicketList from './components/TicketList';
 import LoginScreen from './components/LoginScreen';
 import TicketDetail from './components/TicketDetail';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
-import AutomationScreen from './components/AutomationScreen'; // 1. Importação do novo componente real
+import AutomationScreen from './components/AutomationScreen';
+import StoreManager from './components/StoreManager'; // 1. Importação da nova Gestão de Lojas
 
 function App() {
   const [user, setUser] = useState(null);
@@ -20,7 +21,7 @@ function App() {
   const [interactions, setInteractions] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Busca global de dados (Sincroniza o painel com o banco)
+  // Sincronização Global de Dados
   useEffect(() => {
     async function fetchData() {
       if (!user) return;
@@ -56,13 +57,13 @@ function App() {
     return <LoginScreen onLogin={setUser} />;
   }
 
-  // Roteador de Telas Principal
+  // Roteador de Conteúdo
   const renderContent = () => {
     if (loading) {
       return (
-        <div className="flex h-full items-center justify-center text-slate-400 gap-2">
-          <span className="material-symbols-outlined animate-spin">sync</span>
-          Sincronizando com OmniDesk Cloud...
+        <div className="flex h-full items-center justify-center text-slate-400 gap-2 font-sans">
+          <span className="material-symbols-outlined animate-spin text-blue-600">sync</span>
+          Sincronizando OmniDesk AI...
         </div>
       );
     }
@@ -90,17 +91,17 @@ function App() {
       );
     }
 
-    // TELA: DASHBOARD ANALÍTICO
+    // TELA: ANALÍTICOS
     if (currentView === 'analytics') {
       return <AnalyticsDashboard tickets={tickets} />;
     }
 
-    // 2. TELA: AUTOMAÇÃO & IA (Agora usando o componente REAL)
+    // TELA: CÉREBRO DA IA (CAMPOS VERDES + PERSONALIZADOS)
     if (currentView === 'automacao') {
       return <AutomationScreen />;
     }
 
-    // TELA: INBOX DE TRANSBORDO
+    // TELA: INBOX (FILTRADA)
     if (currentView === 'inbox') {
       const inboxTickets = tickets.filter(t => t.status !== 'BOT_REPLIED');
       return (
@@ -111,21 +112,13 @@ function App() {
       );
     }
 
-    // TELA: GESTÃO DE LOJAS
+    // 2. TELA: GESTÃO DE LOJAS (REAL)
     if (currentView === 'lojas') {
-      return (
-        <div className="flex items-center justify-center h-full text-slate-400">
-           <div className="text-center">
-              <span className="material-symbols-outlined text-6xl mb-4 text-slate-300">store</span>
-              <h2 className="text-xl font-bold text-slate-700">Gestão de Lojas (50)</h2>
-              <p className="mt-2 text-sm">Status: <span className="text-green-500 font-bold">CONECTADO</span></p>
-           </div>
-        </div>
-      );
+      return <StoreManager />;
     }
     
     return (
-      <div className="p-10 text-slate-500 text-center">
+      <div className="p-10 text-slate-500 text-center font-sans">
         A rota "{currentView}" não possui um componente mapeado.
       </div>
     );
@@ -133,6 +126,7 @@ function App() {
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
+      {/* Sidebar Integrada */}
       {currentView !== 'ticket_detail' && (
         <Sidebar 
           user={user} 

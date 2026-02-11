@@ -8,44 +8,55 @@ import LoginScreen from './components/LoginScreen';
 import TicketDetail from './components/TicketDetail';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 import AutomationScreen from './components/AutomationScreen';
-import StoreManager from './components/StoreManager'; // 1. Importação da nova Gestão de Lojas
+import StoreManager from './components/StoreManager';
 
 function App() {
   const [user, setUser] = useState(null);
   const [currentView, setCurrentView] = useState('inbox');
   const [selectedTicketId, setSelectedTicketId] = useState(null);
   
+  // Estados de Dados
   const [tickets, setTickets] = useState([]);
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [interactions, setInteractions] = useState([]);
+  const [storeCount, setStoreCount] = useState(0); // Contador dinâmico para a Sidebar
   const [loading, setLoading] = useState(false);
 
-  // Sincronização Global de Dados
-  useEffect(() => {
-    async function fetchData() {
-      if (!user) return;
+  // Função centralizada para carregar dados do Supabase
+  const fetchAllData = async () => {
+    if (!user) return;
+    setLoading(true);
 
-      setLoading(true);
-      
+    try {
+      // Procura tickets (ordenados por data)
       const { data: ticketsData } = await supabase
         .from('tickets')
         .select('*')
         .order('created_at', { ascending: false });
+      
+      // Procura a contagem real de lojas no banco
+      const { data: storesData } = await supabase.from('stores').select('id');
       
       const { data: ordersData } = await supabase.from('orders').select('*');
       const { data: customersData } = await supabase.from('customers').select('*');
       const { data: interactionsData } = await supabase.from('interactions').select('*');
 
       if (ticketsData) setTickets(ticketsData);
+      if (storesData) setStoreCount(storesData.length);
       if (ordersData) setOrders(ordersData);
       if (customersData) setCustomers(customersData);
       if (interactionsData) setInteractions(interactionsData);
-      
+    } catch (error) {
+      console.error("Erro ao carregar dados:", error);
+    } finally {
       setLoading(false);
     }
+  };
 
-    fetchData();
+  // Carrega dados ao iniciar ou mudar de vista
+  useEffect(() => {
+    fetchAllData();
   }, [user, currentView]);
 
   const handleOpenTicket = (ticketId) => {
@@ -57,9 +68,9 @@ function App() {
     return <LoginScreen onLogin={setUser} />;
   }
 
-  // Roteador de Conteúdo
+  // Roteador de Conteúdo do Dashboard
   const renderContent = () => {
-    if (loading) {
+    if (loading && tickets.length === 0) {
       return (
         <div className="flex h-full items-center justify-center text-slate-400 gap-2 font-sans">
           <span className="material-symbols-outlined animate-spin text-blue-600">sync</span>
@@ -68,7 +79,7 @@ function App() {
       );
     }
 
-    // TELA: CHAT DETALHADO
+    // TELA: CHAT DO TICKET
     if (currentView === 'ticket_detail' && selectedTicketId) {
       const ticket = tickets.find(t => t.id === selectedTicketId);
       const order = orders.find(o => o.id === ticket?.order_id);
@@ -91,17 +102,22 @@ function App() {
       );
     }
 
-    // TELA: ANALÍTICOS
+    // TELA: ANALÍTICOS REAL
     if (currentView === 'analytics') {
       return <AnalyticsDashboard tickets={tickets} />;
     }
 
-    // TELA: CÉREBRO DA IA (CAMPOS VERDES + PERSONALIZADOS)
+    // TELA: CONFIGURAÇÕES DE IA (Cérebro da IA)
     if (currentView === 'automacao') {
       return <AutomationScreen />;
     }
 
-    // TELA: INBOX (FILTRADA)
+    // TELA: HUB DE LOJAS (Passa a função de atualização de contagem)
+    if (currentView === 'lojas') {
+      return <StoreManager onUpdateCount={setStoreCount} />;
+    }
+
+    // TELA: INBOX (Transbordo Humano)
     if (currentView === 'inbox') {
       const inboxTickets = tickets.filter(t => t.status !== 'BOT_REPLIED');
       return (
@@ -110,11 +126,6 @@ function App() {
           onSelectTicket={(ticket) => handleOpenTicket(ticket.id)} 
         />
       );
-    }
-
-    // 2. TELA: GESTÃO DE LOJAS (REAL)
-    if (currentView === 'lojas') {
-      return <StoreManager />;
     }
     
     return (
@@ -126,10 +137,11 @@ function App() {
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
-      {/* Sidebar Integrada */}
+      {/* Sidebar Integrada com Contadores Reais */}
       {currentView !== 'ticket_detail' && (
         <Sidebar 
           user={user} 
+          storeCount={storeCount}
           pendingCount={tickets.filter(t => t.status === 'PENDING_HUMAN').length}
           currentView={currentView}
           onNavigate={setCurrentView}

@@ -2,9 +2,9 @@
 // @ts-nocheck
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from './services/api'; // Importando a conexão real
+import { supabase } from './services/api';
 import Sidebar from './components/Sidebar';
-import InboxScreen from './components/InboxScreen';
+import TicketList from './components/TicketList'; // Mudamos de InboxScreen para TicketList
 import LoginScreen from './components/LoginScreen';
 import TicketDetail from './components/TicketDetail';
 
@@ -13,32 +13,28 @@ function App() {
   const [currentView, setCurrentView] = useState('inbox');
   const [selectedTicketId, setSelectedTicketId] = useState(null);
   
-  // Estados para guardar os dados REAIS do banco
   const [tickets, setTickets] = useState([]);
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [interactions, setInteractions] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // 👇 A MÁGICA: Buscar dados do Supabase ao carregar
+  // 👇 MÁGICA ATUALIZADA: Busca dados incluindo novos campos
   useEffect(() => {
     async function fetchData() {
-      if (!user) return; // Só busca se estiver logado
+      if (!user) return;
 
       setLoading(true);
-      console.log("Buscando dados do Supabase...");
-
-      // 1. Buscar Tickets
-      const { data: ticketsData, error: errorT } = await supabase.from('tickets').select('*');
-      if (errorT) console.error("Erro Tickets:", errorT);
       
-      // 2. Buscar Pedidos
+      // Buscamos os tickets (removendo os que o BOT já resolveu sozinho)
+      const { data: ticketsData } = await supabase
+        .from('tickets')
+        .select('*')
+        .neq('status', 'BOT_REPLIED') // Filtro para não poluir o transbordo humano
+        .order('created_at', { ascending: false });
+      
       const { data: ordersData } = await supabase.from('orders').select('*');
-      
-      // 3. Buscar Clientes
       const { data: customersData } = await supabase.from('customers').select('*');
-
-      // 4. Buscar Interações
       const { data: interactionsData } = await supabase.from('interactions').select('*');
 
       if (ticketsData) setTickets(ticketsData);
@@ -50,9 +46,8 @@ function App() {
     }
 
     fetchData();
-  }, [user]); // Roda toda vez que o usuário loga
+  }, [user, currentView]); // Recarrega quando volta para a inbox
 
-  // Função do clique
   const handleOpenTicket = (ticketId) => {
     setSelectedTicketId(ticketId);
     setCurrentView('ticket_detail');
@@ -62,7 +57,6 @@ function App() {
     return <LoginScreen onLogin={setUser} />;
   }
 
-  // Renderização
   const renderContent = () => {
     if (loading) {
       return (
@@ -73,15 +67,13 @@ function App() {
       );
     }
 
+    // TELA DE DETALHE (CHAT)
     if (currentView === 'ticket_detail' && selectedTicketId) {
       const ticket = tickets.find(t => t.id === selectedTicketId);
       const order = orders.find(o => o.id === ticket?.order_id);
       const customer = customers.find(c => c.id === order?.customer_id);
-      
-      // Filtra mensagens deste ticket
-      const ticketMsgs = interactions.filter(i => i.ticket_id === ticket.id);
+      const ticketMsgs = interactions.filter(i => i.ticket_id === ticket?.id);
 
-      // Se algo estiver faltando (segurança)
       if (!ticket) return <div>Erro: Ticket não encontrado.</div>;
 
       return (
@@ -98,17 +90,17 @@ function App() {
       );
     }
 
+    // TELA DE LISTAGEM COM AS NOVAS ABAS
     if (currentView === 'inbox') {
       return (
-        <InboxScreen 
+        <TicketList 
           tickets={tickets} 
-          orders={orders} 
-          customers={customers} 
-          onOpenTicket={handleOpenTicket} 
+          onSelectTicket={(ticket) => handleOpenTicket(ticket.id)} 
         />
       );
     }
 
+    // TELA DE LOJAS
     if (currentView === 'lojas') {
       return (
         <div className="flex items-center justify-center h-full text-slate-400">
@@ -126,9 +118,11 @@ function App() {
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans">
+      {/* Sidebar só aparece se não estiver no detalhe do ticket */}
       {currentView !== 'ticket_detail' && (
         <Sidebar 
           user={user} 
+          // O contador da sidebar foca apenas no que está REALMENTE aberto (PENDING_HUMAN)
           pendingCount={tickets.filter(t => t.status === 'PENDING_HUMAN').length}
           currentView={currentView}
           onNavigate={setCurrentView}

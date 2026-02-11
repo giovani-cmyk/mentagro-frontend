@@ -90,8 +90,7 @@ function App() {
     }
 
     // 3. TELA DE ANALÍTICOS: Agora com dados reais passados via props
-    if (currentView === 'analiticos') {
-      return <AnalyticsDashboard tickets={tickets} />;
+    if (currentView === 'analiticos' || currentView === 'analytics') {      return <AnalyticsDashboard tickets={tickets} />;
     }
 
     if (currentView === 'inbox') {

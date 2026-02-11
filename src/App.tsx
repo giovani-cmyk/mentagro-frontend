@@ -15,46 +15,51 @@ function App() {
   const [currentView, setCurrentView] = useState('inbox');
   const [selectedTicketId, setSelectedTicketId] = useState(null);
   
-  // Estados de Dados
+  // Estados Globais de Dados
   const [tickets, setTickets] = useState([]);
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [interactions, setInteractions] = useState([]);
-  const [storeCount, setStoreCount] = useState(0); // Contador dinâmico para a Sidebar
+  const [stores, setStores] = useState([]); // Estado para as lojas reais
+  const [storeCount, setStoreCount] = useState(0); 
   const [loading, setLoading] = useState(false);
 
-  // Função centralizada para carregar dados do Supabase
+  // Busca centralizada de todas as informações do banco
   const fetchAllData = async () => {
     if (!user) return;
     setLoading(true);
 
     try {
-      // Procura tickets (ordenados por data)
+      // 1. Busca todos os tickets (sem filtros para as abas funcionarem)
       const { data: ticketsData } = await supabase
         .from('tickets')
         .select('*')
         .order('created_at', { ascending: false });
       
-      // Procura a contagem real de lojas no banco
-      const { data: storesData } = await supabase.from('stores').select('id');
+      // 2. Busca todas as lojas cadastradas
+      const { data: storesData } = await supabase.from('stores').select('*');
       
+      // 3. Busca dados auxiliares
       const { data: ordersData } = await supabase.from('orders').select('*');
       const { data: customersData } = await supabase.from('customers').select('*');
       const { data: interactionsData } = await supabase.from('interactions').select('*');
 
       if (ticketsData) setTickets(ticketsData);
-      if (storesData) setStoreCount(storesData.length);
+      if (storesData) {
+        setStores(storesData);
+        setStoreCount(storesData.length);
+      }
       if (ordersData) setOrders(ordersData);
       if (customersData) setCustomers(customersData);
       if (interactionsData) setInteractions(interactionsData);
+      
     } catch (error) {
-      console.error("Erro ao carregar dados:", error);
+      console.error("Erro na sincronização:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  // Carrega dados ao iniciar ou mudar de vista
   useEffect(() => {
     fetchAllData();
   }, [user, currentView]);
@@ -68,7 +73,7 @@ function App() {
     return <LoginScreen onLogin={setUser} />;
   }
 
-  // Roteador de Conteúdo do Dashboard
+  // Roteador de Views
   const renderContent = () => {
     if (loading && tickets.length === 0) {
       return (
@@ -79,7 +84,7 @@ function App() {
       );
     }
 
-    // TELA: CHAT DO TICKET
+    // TELA: CHAT DETALHADO
     if (currentView === 'ticket_detail' && selectedTicketId) {
       const ticket = tickets.find(t => t.id === selectedTicketId);
       const order = orders.find(o => o.id === ticket?.order_id);
@@ -102,42 +107,39 @@ function App() {
       );
     }
 
-    // TELA: ANALÍTICOS REAL
+    // TELA: ANALÍTICOS (Passa tickets e stores para os cálculos reais)
     if (currentView === 'analytics') {
-      return <AnalyticsDashboard tickets={tickets} />;
+      return <AnalyticsDashboard tickets={tickets} stores={stores} interactions={interactions} />;
     }
 
-    // TELA: CONFIGURAÇÕES DE IA (Cérebro da IA)
+    // TELA: CÉREBRO DA IA
     if (currentView === 'automacao') {
       return <AutomationScreen />;
     }
 
-    // TELA: HUB DE LOJAS (Passa a função de atualização de contagem)
+    // TELA: GESTÃO DE LOJAS
     if (currentView === 'lojas') {
       return <StoreManager onUpdateCount={setStoreCount} />;
     }
 
-    // TELA: INBOX (Transbordo Humano)
+    // TELA: INBOX (GESTÃO DE ATENDIMENTOS POR ABAS)
     if (currentView === 'inbox') {
-      const inboxTickets = tickets.filter(t => t.status !== 'BOT_REPLIED');
+      // 🚀 AQUI ESTÁ A CORREÇÃO: Passamos 'tickets' puro, sem filtro.
+      // O componente TicketList cuidará de filtrar por status em cada aba.
       return (
         <TicketList 
-          tickets={inboxTickets} 
+          tickets={tickets} 
           onSelectTicket={(ticket) => handleOpenTicket(ticket.id)} 
         />
       );
     }
     
-    return (
-      <div className="p-10 text-slate-500 text-center font-sans">
-        A rota "{currentView}" não possui um componente mapeado.
-      </div>
-    );
+    return <div className="p-10 text-center text-slate-400">Página em construção...</div>;
   };
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
-      {/* Sidebar Integrada com Contadores Reais */}
+      {/* Sidebar Dinâmica */}
       {currentView !== 'ticket_detail' && (
         <Sidebar 
           user={user} 

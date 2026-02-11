@@ -1,157 +1,140 @@
 /* eslint-disable */
 // @ts-nocheck
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../services/api';
+import React, { useState } from 'react';
+import { supabase } from '../services/api'; // Usando o nosso arquivo de conexão que funcionou
 
-export default function TicketList({ onSelectTicket }) {
-  const [tickets, setTickets] = useState([]);
-  const [activeTab, setActiveTab] = useState('open'); // 'open', 'pending', 'closed'
-  const [loading, setLoading] = useState(true);
+export default function TicketDetail({ ticket, order, customer, interactions, onBack }) {
+  const [reply, setReply] = useState('');
+  const [sending, setSending] = useState(false);
+  const [localInteractions, setLocalInteractions] = useState(interactions);
 
-  // 1. Busca os tickets no Supabase ao carregar
-  useEffect(() => {
-    fetchTickets();
-  }, []);
+  // Função para enviar a mensagem para o Supabase
+  const handleSendReply = async () => {
+    if (!reply.trim()) return;
 
-  const fetchTickets = async () => {
+    setSending(true);
+    
+    // 1. Pegar dados do usuário que está logado (está no localStorage ou via props, aqui vamos simular o remetente)
+    // No seu App.tsx, o usuário é passado. Para simplificar o teste, vamos usar 'Suporte Mentagro'
+    const newMessage = {
+      ticket_id: ticket.id,
+      sender: 'Suporte Mentagro',
+      message: reply,
+    };
+
     try {
-      setLoading(true);
-      // Buscamos tudo que NÃO foi resolvido pelo robô (BOT_REPLIED)
-      // Também fazemos o "join" para pegar o nome da loja na tabela orders
       const { data, error } = await supabase
-        .from('tickets')
-        .select(`
-          *,
-          orders (
-            store_name
-          )
-        `)
-        .neq('status', 'BOT_REPLIED') // Esconde os resolvidos por robô
-        .order('created_at', { ascending: false });
+        .from('interactions')
+        .insert([newMessage])
+        .select();
 
       if (error) throw error;
-      setTickets(data || []);
-    } catch (error) {
-      console.error('Erro ao buscar tickets:', error);
+
+      // 2. Atualizar a tela na hora com a mensagem nova
+      setLocalInteractions([...localInteractions, data[0]]);
+      setReply(''); // Limpa o campo de texto
+    } catch (err) {
+      alert('Erro ao enviar mensagem: ' + err.message);
     } finally {
-      setLoading(false);
+      setSending(false);
     }
   };
 
-  // 2. Lógica de Filtro para as Abas
-  const openTickets = tickets.filter(t => t.status === 'PENDING_HUMAN');
-  const pendingTickets = tickets.filter(t => t.status === 'IN_PROGRESS');
-  const closedTickets = tickets.filter(t => t.status === 'RESOLVED');
-
-  // Decide qual lista mostrar baseada na aba
-  let currentList = [];
-  if (activeTab === 'open') currentList = openTickets;
-  if (activeTab === 'pending') currentList = pendingTickets;
-  if (activeTab === 'closed') currentList = closedTickets;
-
-  if (loading) return <div className="p-8 text-center text-slate-500">Carregando tickets...</div>;
-
   return (
-    <div className="flex flex-col h-full bg-slate-50">
-      {/* Cabeçalho da Lista */}
-      <div className="p-6 bg-white border-b border-slate-200">
-        <h1 className="text-2xl font-bold text-slate-800 mb-6">Transbordo Humano</h1>
-        
-        {/* ABAS DE NAVEGAÇÃO */}
-        <div className="flex space-x-6 border-b border-slate-100">
-          <button
-            onClick={() => setActiveTab('open')}
-            className={`pb-3 text-sm font-bold flex items-center gap-2 transition-colors border-b-2 ${
-              activeTab === 'open' 
-                ? 'border-red-500 text-red-600' 
-                : 'border-transparent text-slate-400 hover:text-slate-600'
-            }`}
-          >
-            Em Aberto
-            <span className={`px-2 py-0.5 rounded-full text-xs ${activeTab === 'open' ? 'bg-red-100' : 'bg-slate-100'}`}>
-              {openTickets.length}
-            </span>
+    <div className="flex flex-col h-full bg-white">
+      {/* Header do Ticket */}
+      <div className="border-b border-slate-200 p-4 flex items-center justify-between bg-slate-50">
+        <div className="flex items-center gap-4">
+          <button onClick={onBack} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+            <span className="material-symbols-outlined text-slate-600">arrow_back</span>
           </button>
-
-          <button
-            onClick={() => setActiveTab('pending')}
-            className={`pb-3 text-sm font-bold flex items-center gap-2 transition-colors border-b-2 ${
-              activeTab === 'pending' 
-                ? 'border-amber-500 text-amber-600' 
-                : 'border-transparent text-slate-400 hover:text-slate-600'
-            }`}
-          >
-            Em Espera
-            <span className={`px-2 py-0.5 rounded-full text-xs ${activeTab === 'pending' ? 'bg-amber-100' : 'bg-slate-100'}`}>
-              {pendingTickets.length}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('closed')}
-            className={`pb-3 text-sm font-bold flex items-center gap-2 transition-colors border-b-2 ${
-              activeTab === 'closed' 
-                ? 'border-green-500 text-green-600' 
-                : 'border-transparent text-slate-400 hover:text-slate-600'
-            }`}
-          >
-            Concluídos
-            <span className={`px-2 py-0.5 rounded-full text-xs ${activeTab === 'closed' ? 'bg-green-100' : 'bg-slate-100'}`}>
-              {closedTickets.length}
-            </span>
-          </button>
+          <div>
+            <h2 className="text-lg font-bold text-slate-800">{ticket.subject}</h2>
+            <p className="text-xs text-slate-500">ID: {ticket.id} • Loja: {order?.store_name}</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <span className={`px-3 py-1 rounded-full text-xs font-bold ${ticket.priority === 'HIGH' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+            {ticket.priority}
+          </span>
+          <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-600">
+            {ticket.status}
+          </span>
         </div>
       </div>
 
-      {/* LISTAGEM DOS CARDS */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
-        {currentList.length === 0 ? (
-          <div className="text-center py-10 text-slate-400">
-            <span className="material-symbols-outlined text-4xl mb-2">inbox</span>
-            <p>Nenhum ticket nesta aba.</p>
-          </div>
-        ) : (
-          currentList.map((ticket) => (
-            <div 
-              key={ticket.id}
-              onClick={() => onSelectTicket(ticket)} // Chama a função para abrir o TicketDetail
-              className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 cursor-pointer transition-all group"
-            >
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex items-center gap-2">
-                  {/* Bolinha de Prioridade */}
-                  <div className={`w-2.5 h-2.5 rounded-full ${ticket.priority === 'HIGH' ? 'bg-red-500 animate-pulse' : 'bg-amber-400'}`}></div>
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                    {ticket.orders?.store_name || 'Loja Desconhecida'}
-                  </span>
+      <div className="flex-1 flex overflow-hidden">
+        {/* Lado Esquerdo: Chat */}
+        <div className="flex-1 flex flex-col border-r border-slate-200">
+          <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
+            {localInteractions.map((msg, idx) => (
+              <div key={idx} className={`flex ${msg.sender === 'Suporte Mentagro' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[80%] p-4 rounded-2xl shadow-sm ${
+                  msg.sender === 'Suporte Mentagro' 
+                    ? 'bg-blue-600 text-white rounded-tr-none' 
+                    : 'bg-white text-slate-700 border border-slate-200 rounded-tl-none'
+                }`}>
+                  <p className="text-xs font-bold mb-1 opacity-70">{msg.sender}</p>
+                  <p className="text-sm leading-relaxed">{msg.message}</p>
                 </div>
-                <span className="text-xs text-slate-400">
-                  {new Date(ticket.created_at).toLocaleDateString()}
-                </span>
               </div>
+            ))}
+          </div>
 
-              <h3 className="font-bold text-slate-800 mb-1 group-hover:text-blue-600 transition-colors">
-                {ticket.subject}
-              </h3>
-              
-              <div className="flex items-center justify-between mt-3">
-                <div className="text-xs text-slate-500 truncate max-w-[300px]">
-                  {/* Mostra um trecho da resposta do bot se existir, senão mostra ID */}
-                  {ticket.bot_reply ? `🤖 Bot: ${ticket.bot_reply}` : `ID: ${ticket.id}`}
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  {/* Ícone de Sentimento (Opcional se você já tiver no banco) */}
-                  {ticket.sentiment === 'NEGATIVE' && <span title="Cliente Bravo" className="text-lg">😡</span>}
-                  
-                  <button className="text-blue-600 text-sm font-bold flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                    Ver Ticket <span className="material-symbols-outlined text-base">arrow_forward</span>
-                  </button>
-                </div>
+          {/* Área de Digitação */}
+          <div className="p-4 border-t border-slate-200 bg-white">
+            <div className="relative">
+              <textarea 
+                rows="3"
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+                placeholder="Digite sua resposta aqui..."
+                className="w-full border border-slate-200 rounded-xl p-4 pr-16 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none transition-all"
+              />
+              <button 
+                onClick={handleSendReply}
+                disabled={sending || !reply.trim()}
+                className="absolute right-3 bottom-3 p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-all shadow-lg shadow-blue-600/20"
+              >
+                {sending ? (
+                  <span className="material-symbols-outlined animate-spin text-xl">sync</span>
+                ) : (
+                  <span className="material-symbols-outlined text-xl">send</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Lado Direito: Info do Cliente/Pedido */}
+        <div className="w-80 overflow-y-auto p-6 bg-white space-y-8">
+          <div>
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Cliente</h3>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-xl font-bold text-slate-400">
+                {customer?.name?.charAt(0)}
+              </div>
+              <div>
+                <p className="font-bold text-slate-800">{customer?.name}</p>
+                <p className="text-xs text-slate-500">{customer?.email}</p>
               </div>
             </div>
-          ))
-        )}
+          </div>
+
+          <div>
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Detalhes do Pedido</h3>
+            <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Status</span>
+                <span className="font-bold text-amber-600">{order?.status}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Rastreio</span>
+                <span className="font-mono text-blue-600 underline">{order?.tracking_code}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -6,7 +6,7 @@ import Sidebar from './components/Sidebar';
 import TicketList from './components/TicketList';
 import LoginScreen from './components/LoginScreen';
 import TicketDetail from './components/TicketDetail';
-import AnalyticsDashboard from './components/AnalyticsDashboard';
+import AnalyticsDashboard from './components/AnalyticsDashboard'; // Importação confirmada
 
 function App() {
   const [user, setUser] = useState(null);
@@ -26,7 +26,7 @@ function App() {
 
       setLoading(true);
       
-      // Buscamos todos os tickets para que o Analytics funcione corretamente
+      // Buscamos todos os tickets para alimentar o Analytics e a Inbox
       const { data: ticketsData } = await supabase
         .from('tickets')
         .select('*')
@@ -67,14 +67,14 @@ function App() {
       );
     }
 
-    // TELA: DETALHE DO TICKET (CHAT)
+    // 1. TELA: DETALHE DO TICKET (CHAT)
     if (currentView === 'ticket_detail' && selectedTicketId) {
       const ticket = tickets.find(t => t.id === selectedTicketId);
       const order = orders.find(o => o.id === ticket?.order_id);
       const customer = customers.find(c => c.id === order?.customer_id);
       const ticketMsgs = interactions.filter(i => i.ticket_id === ticket?.id);
 
-      if (!ticket) return <div className="p-10 text-center">Ticket não encontrado.</div>;
+      if (!ticket) return <div className="p-10 text-center text-slate-500">Ticket não encontrado.</div>;
 
       return (
         <TicketDetail 
@@ -90,24 +90,24 @@ function App() {
       );
     }
 
-    // TELA: ANALÍTICOS (ID: analytics)
+    // 2. TELA: ANALÍTICOS (Sincronizado com ID 'analytics' da Sidebar)
     if (currentView === 'analytics') {
       return <AnalyticsDashboard tickets={tickets} />;
     }
 
-    // TELA: AUTOMAÇÃO & IA (ID: automacao)
+    // 3. TELA: AUTOMAÇÃO & IA (Sincronizado com ID 'automacao' da Sidebar)
     if (currentView === 'automacao') {
       return (
-        <div className="p-8 bg-slate-50 h-full overflow-y-auto">
+        <div className="p-8 bg-slate-50 h-full overflow-y-auto text-slate-800">
           <div className="max-w-4xl mx-auto">
-            <h1 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2">
+            <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
               <span className="material-symbols-outlined text-blue-600">smart_toy</span>
               Configurações de IA
             </h1>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                <h3 className="font-bold mb-4 text-slate-700">Status do Robô</h3>
+                <h3 className="font-bold mb-4">Status do Robô</h3>
                 <div className="flex items-center gap-3 text-green-600 font-medium">
                   <span className="relative flex h-3 w-3">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
@@ -118,9 +118,9 @@ function App() {
               </div>
 
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                <h3 className="font-bold mb-4 text-slate-700">Instruções de Negócio</h3>
-                <p className="text-sm text-slate-500 mb-4">O robô está treinado para resolver dúvidas e filtrar tickets urgentes.</p>
-                <button className="text-blue-600 font-bold text-sm hover:underline">Ver Prompt do Gemini →</button>
+                <h3 className="font-bold mb-4">Base de Conhecimento</h3>
+                <p className="text-sm text-slate-500 mb-4">O robô utiliza as regras de negócio definidas no n8n.</p>
+                <button className="text-blue-600 font-bold text-sm hover:underline">Ver Instruções Atuais →</button>
               </div>
             </div>
           </div>
@@ -128,8 +128,9 @@ function App() {
       );
     }
 
-    // TELA: TRANSBORDO INBOX (ID: inbox)
+    // 4. TELA: TRANSBORDO INBOX (Sincronizado com ID 'inbox')
     if (currentView === 'inbox') {
+      // Filtra para o humano não ver o que o bot já resolveu sozinho
       const inboxTickets = tickets.filter(t => t.status !== 'BOT_REPLIED');
       return (
         <TicketList 
@@ -139,23 +140,23 @@ function App() {
       );
     }
 
-    // TELA: GESTÃO DE LOJAS (ID: lojas)
+    // 5. TELA: GESTÃO DE LOJAS (Sincronizado com ID 'lojas')
     if (currentView === 'lojas') {
       return (
         <div className="flex items-center justify-center h-full text-slate-400">
            <div className="text-center">
               <span className="material-symbols-outlined text-6xl mb-4 text-slate-300">store</span>
-              <h2 className="text-xl font-bold">Gestão de Lojas</h2>
-              <p className="mt-2 text-sm">Status da Conexão: <span className="text-green-500 font-bold">ESTÁVEL</span></p>
+              <h2 className="text-xl font-bold text-slate-700">Gestão de Lojas (50)</h2>
+              <p className="mt-2 text-sm italic">Conexão com bancos de dados: <span className="text-green-500 font-bold">ATIVA</span></p>
            </div>
         </div>
       );
     }
     
-    // FALLBACK: Rota não encontrada
+    // FALLBACK: Rota de segurança
     return (
       <div className="p-10 text-slate-500 text-center">
-        Opção "{currentView}" não encontrada no roteamento.
+        A rota "{currentView}" ainda não foi configurada no renderContent.
       </div>
     );
   };

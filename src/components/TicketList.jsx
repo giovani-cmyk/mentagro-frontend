@@ -1,43 +1,59 @@
 /* eslint-disable */
 // @ts-nocheck
 import React, { useState } from 'react';
+import { supabase } from '../services/api'; // <--- IMPORTANTE: Importar o Supabase
 
 export default function TicketList({ tickets, onSelectTicket }) {
   const [activeTab, setActiveTab] = useState('EM_ABERTO');
 
+  // --- LÓGICA DE EXCLUSÃO COM SENHA ---
+  const handleDeleteTicket = async (e, ticketId) => {
+    e.stopPropagation(); // Impede que o card abra ao clicar na lixeira
+
+    const senha = window.prompt("Digite a senha gerencial para excluir:");
+    
+    if (senha === "42202916") {
+      try {
+        const { error } = await supabase
+          .from('tickets')
+          .delete()
+          .eq('id', ticketId);
+
+        if (error) throw error;
+
+        alert("Ticket excluído com sucesso!");
+        window.location.reload(); // Recarrega para sumir o card
+      } catch (err) {
+        alert("Erro ao excluir: " + err.message);
+      }
+    } else if (senha !== null) {
+      alert("Senha incorreta! Acesso negado.");
+    }
+  };
+  // -------------------------------------
+
   // Lógica de Filtragem BLINDADA
   const getFilteredTickets = (tabId) => {
-    
-    // Função auxiliar para verificar status (normaliza texto para evitar erros)
     const checkStatus = (ticketStatus, targetStatusList) => {
       if (!ticketStatus) return false;
       return targetStatusList.includes(ticketStatus.toUpperCase());
     };
 
-    // 1. ABA: EM ABERTO (Urgente)
     if (tabId === 'EM_ABERTO') {
       return tickets.filter(t => {
-        // Se não tiver status, ou for um desses, cai aqui
         if (!t.status) return true;
         return checkStatus(t.status, ['PENDING_HUMAN', 'OPEN', 'NEW', 'URGENT']);
       });
     }
 
-    // 2. ABA: CONCLUÍDO (Finalizado)
     if (tabId === 'CONCLUIDO') {
-      return tickets.filter(t => {
-        return checkStatus(t.status, ['RESOLVED', 'CLOSED', 'DONE', 'COMPLETED']);
-      });
+      return tickets.filter(t => checkStatus(t.status, ['RESOLVED', 'CLOSED', 'DONE', 'COMPLETED']));
     }
 
-    // 3. ABA: EM ESPERA (Todo o resto - Lógica "Pega-Tudo")
     if (tabId === 'EM_ESPERA') {
       return tickets.filter(t => {
-        // Se já caiu nas regras de cima, ignoramos. Se não, cai aqui.
         const isOpen = checkStatus(t.status, ['PENDING_HUMAN', 'OPEN', 'NEW', 'URGENT']);
         const isDone = checkStatus(t.status, ['RESOLVED', 'CLOSED', 'DONE', 'COMPLETED']);
-        
-        // Se NÃO é aberto e NÃO é concluído, então é Espera (IN_PROGRESS, BOT_REPLIED, WAITING, etc)
         return !isOpen && !isDone; 
       });
     }
@@ -99,7 +115,16 @@ export default function TicketList({ tickets, onSelectTicket }) {
                 >
                   <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${ticket.channel === 'email' ? 'bg-amber-400' : 'bg-blue-500'}`}></div>
                   
-                  <div className="flex justify-between items-start mb-3 pl-2">
+                  {/* BOTÃO DE EXCLUIR (NOVO) */}
+                  <button 
+                    onClick={(e) => handleDeleteTicket(e, ticket.id)}
+                    className="absolute top-3 right-3 p-1.5 rounded-full text-slate-300 hover:bg-red-50 hover:text-red-500 transition-colors z-10"
+                    title="Excluir Ticket"
+                  >
+                    <span className="material-symbols-outlined text-lg">delete</span>
+                  </button>
+
+                  <div className="flex justify-between items-start mb-3 pl-2 pr-6">
                     <div className="flex items-center gap-2 overflow-hidden">
                       <span className={`material-symbols-outlined text-sm shrink-0 ${ticket.channel === 'email' ? 'text-amber-500' : 'text-blue-500'}`}>
                         {ticket.channel === 'email' ? 'mail' : 'forum'}
@@ -108,7 +133,6 @@ export default function TicketList({ tickets, onSelectTicket }) {
                         {ticket.customer_name || 'Cliente'}
                       </p>
                     </div>
-                    <span className="text-[10px] font-bold text-slate-300 shrink-0">#{ticket.id.toString().slice(-4)}</span>
                   </div>
 
                   <p className="text-[10px] font-black text-blue-500/60 uppercase mb-3 truncate pl-2">{ticket.store_name}</p>
@@ -116,7 +140,8 @@ export default function TicketList({ tickets, onSelectTicket }) {
                   <div className="flex-1 pl-2">
                     <p className="text-xs text-slate-500 line-clamp-3 leading-relaxed">
                       {ticket.channel === 'email' && ticket.subject && <strong className="text-slate-700 block mb-1">{ticket.subject}</strong>}
-                      "{ticket.last_message || 'Clique para ver detalhes...'}"
+                      {/* AQUI MOSTRA O RESUMO DA IA */}
+                      "{ticket.messages || 'Clique para ver detalhes...'}"
                     </p>
                   </div>
 
@@ -127,7 +152,8 @@ export default function TicketList({ tickets, onSelectTicket }) {
                         {new Date(ticket.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                       </span>
                     </div>
-                    <span className="material-symbols-outlined text-slate-200 group-hover:text-blue-600 transition-all">arrow_forward</span>
+                    
+                    <span className="text-[10px] font-bold text-slate-300">#{ticket.id.toString().slice(-4)}</span>
                   </div>
                 </div>
               ))}

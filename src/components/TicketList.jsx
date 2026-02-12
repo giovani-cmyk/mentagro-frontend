@@ -5,17 +5,38 @@ import React, { useState } from 'react';
 export default function TicketList({ tickets, onSelectTicket }) {
   const [activeTab, setActiveTab] = useState('EM_ABERTO');
 
-  // 1. MAPEAMENTO AMPLO DE STATUS: Para ninguém sumir!
+  // Lógica de Filtragem "À Prova de Falhas"
   const getFilteredTickets = (tabId) => {
+    
+    // Normaliza o status para evitar erros de maiúscula/minúscula
+    const normalize = (status) => status ? status.toUpperCase() : '';
+
     if (tabId === 'EM_ABERTO') {
-      // Puxa tudo que for novo ou precisar de humano
-      return tickets.filter(t => t.status === 'PENDING_HUMAN' || t.status === 'OPEN' || t.status === 'NEW' || !t.status);
+      // Pega tudo que é urgente ou novo
+      return tickets.filter(t => {
+        const s = normalize(t.status);
+        return s === 'PENDING_HUMAN' || s === 'OPEN' || s === 'NEW' || !s; // !s pega tickets sem status
+      });
     }
-    if (tabId === 'EM_ESPERA') {
-      return tickets.filter(t => t.status === 'BOT_REPLIED' || t.status === 'WAITING');
-    }
+
     if (tabId === 'CONCLUIDO') {
-      return tickets.filter(t => t.status === 'RESOLVED' || t.status === 'CLOSED');
+      // Pega tudo que já foi finalizado
+      return tickets.filter(t => {
+        const s = normalize(t.status);
+        return s === 'RESOLVED' || s === 'CLOSED' || s === 'DONE';
+      });
+    }
+
+    if (tabId === 'EM_ESPERA') {
+      // LÓGICA PEGA-TUDO:
+      // Se não é "Aberto" e não é "Concluído", então é "Em Espera".
+      // Isso garante que BOT_REPLIED, WAITING, ON_HOLD, etc., apareçam aqui.
+      return tickets.filter(t => {
+        const s = normalize(t.status);
+        const isOpen = s === 'PENDING_HUMAN' || s === 'OPEN' || s === 'NEW';
+        const isDone = s === 'RESOLVED' || s === 'CLOSED' || s === 'DONE';
+        return !isOpen && !isDone; 
+      });
     }
     return [];
   };
@@ -30,7 +51,7 @@ export default function TicketList({ tickets, onSelectTicket }) {
 
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden font-sans">
-      {/* HEADER */}
+      {/* Cabeçalho */}
       <div className="h-16 px-8 flex items-center justify-between bg-white border-b border-slate-200 shrink-0">
         <h2 className="font-bold text-slate-800 text-lg flex items-center gap-2">
           <span className="material-symbols-outlined text-blue-600">view_day</span>
@@ -38,7 +59,7 @@ export default function TicketList({ tickets, onSelectTicket }) {
         </h2>
       </div>
 
-      {/* ABAS COM CONTADORES REAIS */}
+      {/* Abas de Navegação */}
       <div className="bg-white px-8 border-b border-slate-200 flex gap-8 shrink-0">
         {tabs.map(tab => {
           const count = getFilteredTickets(tab.id).length;
@@ -62,9 +83,9 @@ export default function TicketList({ tickets, onSelectTicket }) {
         })}
       </div>
 
-      {/* CONTEÚDO: Grid alinhado à esquerda */}
+      {/* Grid de Tickets */}
       <div className="flex-1 overflow-y-auto p-8">
-        <div className="w-full"> {/* Removido o max-w-5xl mx-auto para evitar o "salto" para a direita */}
+        <div className="w-full">
           {currentTickets.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 justify-start">
               {currentTickets.map(ticket => (
@@ -73,9 +94,10 @@ export default function TicketList({ tickets, onSelectTicket }) {
                   onClick={() => onSelectTicket(ticket)}
                   className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:border-blue-200 transition-all cursor-pointer group relative overflow-hidden flex flex-col h-full"
                 >
+                  {/* Borda lateral indicando canal */}
                   <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${ticket.channel === 'email' ? 'bg-amber-400' : 'bg-blue-500'}`}></div>
                   
-                  <div className="flex justify-between items-start mb-3">
+                  <div className="flex justify-between items-start mb-3 pl-2">
                     <div className="flex items-center gap-2 overflow-hidden">
                       <span className={`material-symbols-outlined text-sm shrink-0 ${ticket.channel === 'email' ? 'text-amber-500' : 'text-blue-500'}`}>
                         {ticket.channel === 'email' ? 'mail' : 'forum'}
@@ -87,16 +109,16 @@ export default function TicketList({ tickets, onSelectTicket }) {
                     <span className="text-[10px] font-bold text-slate-300 shrink-0">#{ticket.id.toString().slice(-4)}</span>
                   </div>
 
-                  <p className="text-[10px] font-black text-blue-500/60 uppercase mb-3 truncate">{ticket.store_name}</p>
+                  <p className="text-[10px] font-black text-blue-500/60 uppercase mb-3 truncate pl-2">{ticket.store_name}</p>
 
-                  <div className="flex-1">
+                  <div className="flex-1 pl-2">
                     <p className="text-xs text-slate-500 line-clamp-3 leading-relaxed">
                       {ticket.channel === 'email' && ticket.subject && <strong className="text-slate-700 block mb-1">{ticket.subject}</strong>}
                       "{ticket.last_message || 'Clique para ver o histórico...'}"
                     </p>
                   </div>
 
-                  <div className="flex justify-between items-center pt-4 mt-4 border-t border-slate-50">
+                  <div className="flex justify-between items-center pt-4 mt-4 border-t border-slate-50 pl-2">
                     <div className="flex items-center gap-1 text-slate-400">
                       <span className="material-symbols-outlined text-[14px]">schedule</span>
                       <span className="text-[10px] font-bold">
@@ -112,6 +134,7 @@ export default function TicketList({ tickets, onSelectTicket }) {
             <div className="flex flex-col items-center justify-center py-32 opacity-20">
               <span className="material-symbols-outlined text-8xl mb-4">inbox</span>
               <h3 className="text-xl font-black uppercase tracking-[0.2em]">Tudo Limpo</h3>
+              <p className="text-sm font-medium mt-2">Nenhum ticket nesta aba.</p>
             </div>
           )}
         </div>

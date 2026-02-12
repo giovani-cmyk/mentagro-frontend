@@ -5,36 +5,39 @@ import React, { useState } from 'react';
 export default function TicketList({ tickets, onSelectTicket }) {
   const [activeTab, setActiveTab] = useState('EM_ABERTO');
 
-  // Lógica de Filtragem "À Prova de Falhas"
+  // Lógica de Filtragem BLINDADA
   const getFilteredTickets = (tabId) => {
     
-    // Normaliza o status para evitar erros de maiúscula/minúscula
-    const normalize = (status) => status ? status.toUpperCase() : '';
+    // Função auxiliar para verificar status (normaliza texto para evitar erros)
+    const checkStatus = (ticketStatus, targetStatusList) => {
+      if (!ticketStatus) return false;
+      return targetStatusList.includes(ticketStatus.toUpperCase());
+    };
 
+    // 1. ABA: EM ABERTO (Urgente)
     if (tabId === 'EM_ABERTO') {
-      // Pega tudo que é urgente ou novo
       return tickets.filter(t => {
-        const s = normalize(t.status);
-        return s === 'PENDING_HUMAN' || s === 'OPEN' || s === 'NEW' || !s; // !s pega tickets sem status
+        // Se não tiver status, ou for um desses, cai aqui
+        if (!t.status) return true;
+        return checkStatus(t.status, ['PENDING_HUMAN', 'OPEN', 'NEW', 'URGENT']);
       });
     }
 
+    // 2. ABA: CONCLUÍDO (Finalizado)
     if (tabId === 'CONCLUIDO') {
-      // Pega tudo que já foi finalizado
       return tickets.filter(t => {
-        const s = normalize(t.status);
-        return s === 'RESOLVED' || s === 'CLOSED' || s === 'DONE';
+        return checkStatus(t.status, ['RESOLVED', 'CLOSED', 'DONE', 'COMPLETED']);
       });
     }
 
+    // 3. ABA: EM ESPERA (Todo o resto - Lógica "Pega-Tudo")
     if (tabId === 'EM_ESPERA') {
-      // LÓGICA PEGA-TUDO:
-      // Se não é "Aberto" e não é "Concluído", então é "Em Espera".
-      // Isso garante que BOT_REPLIED, WAITING, ON_HOLD, etc., apareçam aqui.
       return tickets.filter(t => {
-        const s = normalize(t.status);
-        const isOpen = s === 'PENDING_HUMAN' || s === 'OPEN' || s === 'NEW';
-        const isDone = s === 'RESOLVED' || s === 'CLOSED' || s === 'DONE';
+        // Se já caiu nas regras de cima, ignoramos. Se não, cai aqui.
+        const isOpen = checkStatus(t.status, ['PENDING_HUMAN', 'OPEN', 'NEW', 'URGENT']);
+        const isDone = checkStatus(t.status, ['RESOLVED', 'CLOSED', 'DONE', 'COMPLETED']);
+        
+        // Se NÃO é aberto e NÃO é concluído, então é Espera (IN_PROGRESS, BOT_REPLIED, WAITING, etc)
         return !isOpen && !isDone; 
       });
     }
@@ -59,7 +62,7 @@ export default function TicketList({ tickets, onSelectTicket }) {
         </h2>
       </div>
 
-      {/* Abas de Navegação */}
+      {/* Abas */}
       <div className="bg-white px-8 border-b border-slate-200 flex gap-8 shrink-0">
         {tabs.map(tab => {
           const count = getFilteredTickets(tab.id).length;
@@ -83,7 +86,7 @@ export default function TicketList({ tickets, onSelectTicket }) {
         })}
       </div>
 
-      {/* Grid de Tickets */}
+      {/* Grid */}
       <div className="flex-1 overflow-y-auto p-8">
         <div className="w-full">
           {currentTickets.length > 0 ? (
@@ -94,7 +97,6 @@ export default function TicketList({ tickets, onSelectTicket }) {
                   onClick={() => onSelectTicket(ticket)}
                   className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:border-blue-200 transition-all cursor-pointer group relative overflow-hidden flex flex-col h-full"
                 >
-                  {/* Borda lateral indicando canal */}
                   <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${ticket.channel === 'email' ? 'bg-amber-400' : 'bg-blue-500'}`}></div>
                   
                   <div className="flex justify-between items-start mb-3 pl-2">
@@ -114,7 +116,7 @@ export default function TicketList({ tickets, onSelectTicket }) {
                   <div className="flex-1 pl-2">
                     <p className="text-xs text-slate-500 line-clamp-3 leading-relaxed">
                       {ticket.channel === 'email' && ticket.subject && <strong className="text-slate-700 block mb-1">{ticket.subject}</strong>}
-                      "{ticket.last_message || 'Clique para ver o histórico...'}"
+                      "{ticket.last_message || 'Clique para ver detalhes...'}"
                     </p>
                   </div>
 

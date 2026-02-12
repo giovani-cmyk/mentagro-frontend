@@ -26,18 +26,22 @@ function App() {
   const [storeCount, setStoreCount] = useState(0); 
   const [loading, setLoading] = useState(false);
 
-  // Busca centralizada
+  // Busca centralizada de todas as informações do banco
   const fetchAllData = async () => {
     if (!user) return;
     setLoading(true);
 
     try {
+      // 1. Busca todos os tickets
       const { data: ticketsData } = await supabase
         .from('tickets')
         .select('*')
         .order('created_at', { ascending: false });
       
+      // 2. Busca todas as lojas
       const { data: storesData } = await supabase.from('stores').select('*');
+      
+      // 3. Busca dados auxiliares
       const { data: ordersData } = await supabase.from('orders').select('*');
       const { data: customersData } = await supabase.from('customers').select('*');
       const { data: interactionsData } = await supabase.from('interactions').select('*');
@@ -60,25 +64,25 @@ function App() {
 
   useEffect(() => {
     fetchAllData();
-  }, [user]); // Removi currentView da dependência para não recarregar toda hora
+  }, [user]); // Removi currentView da dependência para evitar recarregamento desnecessário ao trocar abas
 
   // FUNÇÃO PARA ABRIR O MODAL
   const handleOpenTicket = (ticketId) => {
     setSelectedTicketId(ticketId);
-    // NÃO mudamos mais o currentView, apenas definimos o ID selecionado
+    // NÃO mudamos mais o currentView para manter a lista no fundo
   };
 
   // FUNÇÃO PARA FECHAR O MODAL
   const handleCloseTicket = () => {
     setSelectedTicketId(null);
-    fetchAllData(); // Atualiza a lista ao fechar (para ver status novo)
+    fetchAllData(); // Atualiza a lista ao fechar (para refletir mudança de status)
   };
 
   if (!user) {
     return <LoginScreen onLogin={setUser} />;
   }
 
-  // --- RENDERIZAÇÃO DO CONTEÚDO PRINCIPAL ---
+  // --- RENDERIZAÇÃO DO CONTEÚDO PRINCIPAL (LISTA/DASHBOARD) ---
   const renderContent = () => {
     if (loading && tickets.length === 0) {
       return (
@@ -89,12 +93,20 @@ function App() {
       );
     }
 
-    if (currentView === 'analytics') return <AnalyticsDashboard tickets={tickets} stores={stores} interactions={interactions} />;
-    if (currentView === 'automacao') return <AutomationScreen />;
-    if (currentView === 'lojas') return <StoreManager onUpdateCount={setStoreCount} />;
+    if (currentView === 'analytics') {
+      return <AnalyticsDashboard tickets={tickets} stores={stores} interactions={interactions} />;
+    }
+
+    if (currentView === 'automacao') {
+      return <AutomationScreen />;
+    }
+
+    if (currentView === 'lojas') {
+      return <StoreManager onUpdateCount={setStoreCount} />;
+    }
 
     // Padrão: Inbox (Lista de Tickets)
-    // Note que não temos mais o "if currentView === ticket_detail" aqui
+    // Se estivermos vendo detalhes, a lista continua renderizada no fundo (por isso removemos o if antigo)
     return (
       <TicketList 
         tickets={tickets} 
@@ -104,7 +116,7 @@ function App() {
   };
 
   // --- PREPARAÇÃO DOS DADOS PARA O MODAL ---
-  // Só calculamos isso se tiver um ticket selecionado
+  // Só calculamos isso se tiver um ticket selecionado para exibir no popup
   let selectedTicketData = null;
   if (selectedTicketId) {
     const ticket = tickets.find(t => t.id === selectedTicketId);
@@ -119,7 +131,7 @@ function App() {
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans overflow-hidden relative">
-      {/* Sidebar Fixa */}
+      {/* Sidebar Fixa (Agora aparece sempre) */}
       <Sidebar 
         user={user} 
         storeCount={storeCount}
@@ -132,8 +144,8 @@ function App() {
         {renderContent()}
       </main>
 
-      {/* --- O MODAL FICA AQUI (FORA DO MAIN) --- */}
-      {/* Se tiver um ID selecionado e os dados existirem, mostra o modal por cima de tudo */}
+      {/* --- O MODAL (OVERLAY) FICA AQUI --- */}
+      {/* Renderiza por cima de tudo se houver ticket selecionado */}
       {selectedTicketId && selectedTicketData && (
         <TicketDetail 
           ticket={selectedTicketData.ticket}

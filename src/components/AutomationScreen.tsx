@@ -1,13 +1,22 @@
-/* eslint-disable */
-// @ts-nocheck
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/api';
 
+interface Field {
+  id: number | string;
+  label: string;
+  content: string;
+}
+
+interface SettingsData {
+  padrão: Field[];
+  personalizadas: Field[];
+}
+
 export default function AutomationScreen() {
-  const [data, setData] = useState({ padrão: [], personalizadas: [] });
-  const [isOnline, setIsOnline] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null); // Estado para gerenciar erros
+  const [data, setData] = useState<SettingsData>({ padrão: [], personalizadas: [] });
+  const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadSettings();
@@ -16,37 +25,76 @@ export default function AutomationScreen() {
   async function loadSettings() {
     const { data: res } = await supabase.from('settings').select('*').eq('id', 1).single();
     if (res && res.bot_prompt) {
-      setData(typeof res.bot_prompt === 'string' ? JSON.parse(res.bot_prompt) : res.bot_prompt);
-      const lastSeen = new Date(res.last_seen);
-      setIsOnline((new Date() - lastSeen) / 1000 / 60 < 5);
+      // Parse if string, otherwise use directly
+      const parsedData = typeof res.bot_prompt === 'string' ? JSON.parse(res.bot_prompt) : res.bot_prompt;
+      setData(parsedData);
+
+      if (res.last_seen) {
+        const lastSeen = new Date(res.last_seen);
+        setIsOnline((new Date().getTime() - lastSeen.getTime()) / 1000 / 60 < 5);
+      }
     }
   }
 
-  const handleUpdateField = (type, id, value) => {
-    setError(null); // Limpa erro ao digitar
+  const handleUpdateField = (type: 'padrão' | 'personalizadas', id: number | string, value: string) => {
+    setError(null);
     const newData = { ...data };
-    const field = newData[type].find(f => f.id === id);
-    if (field) field.content = value;
-    setData(newData);
+    // We need to be careful with references, but for this level of depth it's okay-ish, 
+    // though mapping is safer for immutability.
+    const list = newData[type].map(f => {
+      if (f.id === id) {
+        return { ...f, content: value };
+      }
+      return f;
+    });
+
+    setData({ ...newData, [type]: list });
+  };
+
+  const handleUpdateLabel = (id: number | string, newLabel: string) => {
+    const newData = { ...data };
+    const list = newData.personalizadas.map(f => {
+      if (f.id === id) {
+        return { ...f, label: newLabel };
+      }
+      return f;
+    });
+    setData({ ...newData, personalizadas: list });
   };
 
   const handleSave = async () => {
     // 🛑 VALIDAÇÃO: Verifica se algum campo padrão está vazio
     const emptyFields = data.padrão.filter(f => f.content.trim() === "");
-    
+
     if (emptyFields.length > 0) {
       setError(`Atenção: Os campos ${emptyFields.map(f => f.label).join(", ")} são obrigatórios!`);
       return;
     }
 
     setSaving(true);
-    const { error: supabaseError } = await supabase.from('settings').update({ bot_prompt: data }).eq('id', 1);
-    
+    const { error: supabaseError } = await supabase
+      .from('settings')
+      .update({ bot_prompt: data })
+      .eq('id', 1);
+
     if (!supabaseError) {
       alert("Cérebro da IA atualizado com sucesso! 🚀");
       setError(null);
+    } else {
+      console.error(supabaseError);
+      setError("Erro ao salvar configurações.");
     }
     setSaving(false);
+  };
+
+  const addCustomField = () => {
+    setData({
+      ...data,
+      personalizadas: [
+        ...data.personalizadas,
+        { id: Date.now(), label: 'Nova Regra', content: '' }
+      ]
+    });
   };
 
   return (
@@ -78,9 +126,9 @@ export default function AutomationScreen() {
               {data.padrão.map(field => (
                 <div key={field.id} className={`bg-white p-6 rounded-2xl border-2 transition-all duration-300 ${field.content.trim() === "" ? 'border-red-100 bg-red-50/20' : 'border-green-500 shadow-sm'}`}>
                   <label className="text-xs font-black text-slate-500 uppercase mb-3 block">{field.label}</label>
-                  <textarea 
+                  <textarea
                     className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-                    rows="2"
+                    rows={2}
                     value={field.content}
                     onChange={(e) => handleUpdateField('padrão', field.id, e.target.value)}
                   />
@@ -91,27 +139,34 @@ export default function AutomationScreen() {
 
           {/* PERSONALIZADAS */}
           <div className="mb-12">
-             <div className="flex justify-between mb-6">
-                <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest">Personalizadas</h2>
-                <button onClick={() => setData({...data, personalizadas: [...data.personalizadas, {id: Date.now(), label: 'Nova Regra', content: ''}]})} className="text-blue-600 text-xs font-bold">+ Adicionar</button>
-             </div>
-             <div className="space-y-4">
-                {data.personalizadas.map(field => (
-                  <div key={field.id} className="bg-white p-6 rounded-2xl border-2 border-slate-100">
-                    <input className="text-sm font-bold text-blue-600 mb-2 w-full outline-none bg-transparent" value={field.label} onChange={(e) => {
-                       const n = {...data}; n.personalizadas.find(f => f.id === field.id).label = e.target.e.target.value; setData(n);
-                    }} />
-                    <textarea className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none" rows="2" value={field.content} onChange={(e) => handleUpdateField('personalizadas', field.id, e.target.value)} />
-                  </div>
-                ))}
-             </div>
+            <div className="flex justify-between mb-6">
+              <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest">Personalizadas</h2>
+              <button onClick={addCustomField} className="text-blue-600 text-xs font-bold hover:underline">+ Adicionar</button>
+            </div>
+            <div className="space-y-4">
+              {data.personalizadas.map(field => (
+                <div key={field.id} className="bg-white p-6 rounded-2xl border-2 border-slate-100">
+                  <input
+                    className="text-sm font-bold text-blue-600 mb-2 w-full outline-none bg-transparent"
+                    value={field.label}
+                    onChange={(e) => handleUpdateLabel(field.id, e.target.value)}
+                  />
+                  <textarea
+                    className="w-full bg-slate-50 rounded-xl p-3 text-sm outline-none resize-none"
+                    rows={2}
+                    value={field.content}
+                    onChange={(e) => handleUpdateField('personalizadas', field.id, e.target.value)}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
       {/* 🚀 BOTÃO ALINHADO: Sticky Footer dentro do conteúdo */}
       <div className="absolute bottom-0 left-0 right-0 p-6 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center">
-        <button 
+        <button
           onClick={handleSave}
           disabled={saving}
           className={`w-full max-w-lg py-4 rounded-2xl font-bold shadow-xl transition-all flex items-center justify-center gap-3 ${saving ? 'bg-slate-400' : 'bg-slate-900 hover:bg-blue-600 text-white active:scale-95'}`}

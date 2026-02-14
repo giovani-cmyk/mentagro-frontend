@@ -1,13 +1,21 @@
-/* eslint-disable */
-// @ts-nocheck
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/api';
+import type { Store } from '../types';
 
-export default function StoreManager({ onUpdateCount }) {
-  const [stores, setStores] = useState([]);
+interface StoreManagerProps {
+  onUpdateCount: (count: number) => void;
+}
+
+interface FormData {
+  name: string;
+  shopify_url: string;
+}
+
+export default function StoreManager({ onUpdateCount }: StoreManagerProps) {
+  const [stores, setStores] = useState<Store[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingStore, setEditingStore] = useState(null);
-  const [formData, setFormData] = useState({ name: '', shopify_url: '' });
+  const [editingStore, setEditingStore] = useState<Store | null>(null);
+  const [formData, setFormData] = useState<FormData>({ name: '', shopify_url: '' });
 
   useEffect(() => {
     loadStores();
@@ -16,12 +24,14 @@ export default function StoreManager({ onUpdateCount }) {
   async function loadStores() {
     const { data } = await supabase.from('stores').select('*').order('created_at');
     if (data) {
-      setStores(data);
-      onUpdateCount(data.length); // Atualiza o número na Sidebar
+      // Cast the data to match Store interface since strict type checking is enabled
+      const typedData = data as unknown as Store[];
+      setStores(typedData);
+      onUpdateCount(typedData.length); // Atualiza o número na Sidebar
     }
   }
 
-  const handleSave = async (e) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingStore) {
       await supabase.from('stores').update(formData).eq('id', editingStore.id);
@@ -34,7 +44,7 @@ export default function StoreManager({ onUpdateCount }) {
     loadStores();
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id: string) => {
     if (confirm("Tem certeza que deseja remover esta loja? A automação será interrompida.")) {
       await supabase.from('stores').delete().eq('id', id);
       loadStores();
@@ -49,8 +59,8 @@ export default function StoreManager({ onUpdateCount }) {
             <span className="material-symbols-outlined text-blue-600">hub</span>
             Hub de Lojas ({stores.length})
           </h1>
-          <button 
-            onClick={() => { setEditingStore(null); setFormData({name:'', shopify_url:''}); setIsModalOpen(true); }}
+          <button
+            onClick={() => { setEditingStore(null); setFormData({ name: '', shopify_url: '' }); setIsModalOpen(true); }}
             className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 hover:bg-blue-600 transition-all"
           >
             <span className="material-symbols-outlined">add</span> Conectar Nova Loja
@@ -65,23 +75,22 @@ export default function StoreManager({ onUpdateCount }) {
                 <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-blue-600">
                   <span className="material-symbols-outlined">storefront</span>
                 </div>
-                <div className={`px-3 py-1 rounded-full text-[10px] font-black ${
-                  (new Date() - new Date(store.last_sync)) / 1000 / 60 < 15 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
-                }`}>
-                  {(new Date() - new Date(store.last_sync)) / 1000 / 60 < 15 ? 'CONECTADO' : 'OFFLINE'}
+                <div className={`px-3 py-1 rounded-full text-[10px] font-black ${(new Date().getTime() - new Date(store.last_sync).getTime()) / 1000 / 60 < 15 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+                  }`}>
+                  {(new Date().getTime() - new Date(store.last_sync).getTime()) / 1000 / 60 < 15 ? 'CONECTADO' : 'OFFLINE'}
                 </div>
               </div>
               <h3 className="font-bold text-slate-800 text-lg">{store.name}</h3>
               <p className="text-xs text-slate-400 mb-6 truncate">{store.shopify_url}</p>
-              
+
               <div className="flex justify-between pt-4 border-t border-slate-50">
-                <button 
-                  onClick={() => { setEditingStore(store); setFormData({name: store.name, shopify_url: store.shopify_url}); setIsModalOpen(true); }}
+                <button
+                  onClick={() => { setEditingStore(store); setFormData({ name: store.name, shopify_url: store.shopify_url }); setIsModalOpen(true); }}
                   className="material-symbols-outlined text-slate-300 hover:text-blue-600 transition-colors"
                 >
                   settings
                 </button>
-                <button 
+                <button
                   onClick={() => handleDelete(store.id)}
                   className="material-symbols-outlined text-slate-300 hover:text-red-500 transition-colors"
                 >
@@ -100,13 +109,13 @@ export default function StoreManager({ onUpdateCount }) {
               <form onSubmit={handleSave} className="space-y-4">
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase">Nome da Loja</label>
-                  <input required className="w-full bg-slate-50 p-3 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" 
-                    value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                  <input required className="w-full bg-slate-50 p-3 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                    value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
                 </div>
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase">URL Shopify</label>
-                  <input required className="w-full bg-slate-50 p-3 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" 
-                    placeholder="loja.myshopify.com" value={formData.shopify_url} onChange={e => setFormData({...formData, shopify_url: e.target.value})} />
+                  <input required className="w-full bg-slate-50 p-3 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="loja.myshopify.com" value={formData.shopify_url} onChange={e => setFormData({ ...formData, shopify_url: e.target.value })} />
                 </div>
                 <div className="flex gap-3 mt-8">
                   <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 font-bold text-slate-500">Cancelar</button>

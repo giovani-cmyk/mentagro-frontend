@@ -1,0 +1,23 @@
+{
+    "compilerOptions": {
+        "allowJs": true,
+        "lib": [
+            "esnext",
+            "DOM"
+        ],
+        "module": "esnext",
+        "moduleResolution": "node",
+        "strict": true,
+        "target": "esnext",
+        "baseUrl": ".",
+        "paths": {
+            "supabase": [
+                "../../node_modules/@supabase/supabase-js/dist/index.d.mts"
+            ],
+            "@google/generative-ai": [
+                "../../node_modules/@google/generative-ai/dist/generative-ai.d.ts"
+            ]
+        },
+        "types": []
+    }
+}

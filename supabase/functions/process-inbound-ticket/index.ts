@@ -35,15 +35,22 @@ Deno.serve(async (req: Request) => {
 
     try {
         // ── 1. Receive Payload ──────────────────────────────────────
-        const { customer_email, subject, body_text, date } = await req.json();
+        const payload = await req.json();
+
+        // Resend payload structure for inbound emails:
+        const rawFrom = payload.data.from; // e.g., "John Doe <john@example.com>"
+        // Extract just the email address using regex or string splitting
+        const customer_email = rawFrom.match(/<(.+)>/)?.[1] || rawFrom;
+        const subject = payload.data.subject;
+        const body_text = payload.data.text;
+        const date = payload.data.created_at;
 
         if (!customer_email || !body_text) {
             return new Response(
-                JSON.stringify({ error: "Missing required fields: customer_email or body_text" }),
+                JSON.stringify({ error: "Missing required fields: from or text in Resend payload" }),
                 { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
         }
-
         // ── 2. Shopify Integration ──────────────────────────────────
         const shopifyUrl = Deno.env.get("SHOPIFY_STORE_URL");
         const shopifyToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN");

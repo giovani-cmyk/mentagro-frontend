@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 Deno.serve(async (req) => {
     console.log("🚀 Function started!");
@@ -51,7 +51,6 @@ Deno.serve(async (req) => {
                 }
             } catch (shopErr) {
                 console.error("❌ Shopify Fetch Error:", shopErr);
-                // Não usamos 'throw' aqui. Se o Shopify falhar, o ticket ainda deve ser criado.
             }
         } else {
             console.log("⚠️ Shopify credentials missing. Skipping.");
@@ -64,7 +63,7 @@ Deno.serve(async (req) => {
         const geminiKey = Deno.env.get('GEMINI_API_KEY');
         const prompt = `Resuma este e-mail em uma frase curta e defina a urgência (ALTA, MEDIA, BAIXA). E-mail: "${body_text}"`;
 
-        const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${geminiKey}`, {
+        const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
@@ -110,6 +109,4 @@ Deno.serve(async (req) => {
 
     } catch (error: any) {
         console.error("🔥 CRITICAL ERROR:", error.message || error);
-        return new Response(JSON.stringify({ error: error.message }), { headers: { "Content-Type": "application/json" }, status: 500 });
-    }
-});
+        return new Response(JSON.stringify({ error: error.message }), { headers: { "Content-

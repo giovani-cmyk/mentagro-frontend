@@ -158,6 +158,7 @@ ${body_text}`,
                         const parsed = JSON.parse(text);
                         summary = parsed.summary || summary;
                         urgency = parsed.urgency || urgency;
+                        console.log("🤖 Gemini Summary Generated:", summary);
                     } catch {
                         console.error("Failed to parse Gemini response as JSON:", text);
                         // Keep defaults
@@ -201,10 +202,11 @@ ${body_text}`,
             .single();
 
         if (insertError) {
-            console.error("Insert Error:", insertError);
-            throw new Error(`Failed to insert ticket: ${insertError.message}`);
+            console.error("❌ DB INSERT ERROR:", insertError);
+            throw insertError;
         }
 
+        console.log("✅ SUCCESS: Ticket saved to database!");
         // ── 5. Success Response ─────────────────────────────────────
         return new Response(
             JSON.stringify({ success: true, ticket }),
@@ -212,6 +214,7 @@ ${body_text}`,
         );
 
     } catch (err: any) {
+        console.error("🔥 CRITICAL EXECUTION ERROR:", err);
         console.error("Function Error:", err);
         return new Response(
             JSON.stringify({ error: err.message }),

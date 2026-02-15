@@ -34,20 +34,31 @@ Deno.serve(async (req: Request) => {
     }
 
     try {
-        // ── 1. Receive Payload ──────────────────────────────────────
-        const payload = await req.json();
+        // ── 1. Receive & Parse Payload (Robust) ─────────────────────
+        const rawText = await req.text();
+        console.log("Incoming Raw Payload:", rawText);
 
-        // Resend payload structure for inbound emails:
-        const rawFrom = payload.data.from; // e.g., "John Doe <john@example.com>"
-        // Extract just the email address using regex or string splitting
-        const customer_email = rawFrom.match(/<(.+)>/)?.[1] || rawFrom;
-        const subject = payload.data.subject;
-        const body_text = payload.data.text;
-        const date = payload.data.created_at;
-
-        if (!customer_email || !body_text) {
+        let payload;
+        try {
+            payload = JSON.parse(rawText);
+        } catch (e) {
+            console.error("JSON Parse Error. Raw text was:", rawText);
             return new Response(
-                JSON.stringify({ error: "Missing required fields: from or text in Resend payload" }),
+                JSON.stringify({ error: "Invalid JSON payload" }),
+                { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+            );
+        }
+
+        // Safely extract data, supporting both Resend webhook and direct mock formats
+        const rawFrom = payload?.data?.from || payload?.email || "";
+        const customer_email = rawFrom.match(/<(.+)>/)?.[1] || rawFrom || "desconhecido@email.com";
+        const subject = payload?.data?.subject || payload?.subject || "Sem assunto";
+        const body_text = payload?.data?.text || payload?.body_text || "Mensagem vazia";
+        const date = payload?.data?.created_at || payload?.date;
+
+        if (!customer_email || body_text === "Mensagem vazia") {
+            return new Response(
+                JSON.stringify({ error: "Missing required fields in payload" }),
                 { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
         }

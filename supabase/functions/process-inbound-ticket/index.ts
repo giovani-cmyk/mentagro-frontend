@@ -109,4 +109,6 @@ Deno.serve(async (req) => {
 
     } catch (error: any) {
         console.error("🔥 CRITICAL ERROR:", error.message || error);
-        return new Response(JSON.stringify({ error: error.message }), { headers: { "Content-
+        return new Response(JSON.stringify({ error: error.message }), { headers: { "Content-Type": "application/json" }, status: 500 });
+    }
+});

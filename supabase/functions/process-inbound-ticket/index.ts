@@ -1,224 +1,115 @@
-// deno-lint-ignore-file
-declare const Deno: {
-    serve(handler: (req: Request) => Promise<Response> | Response): void;
-    env: { get(key: string): string | undefined };
-};
+import { createClient } from '@supabase/supabase-js'
 
-import { createClient } from "supabase";
-
-// ─── CORS Headers ───────────────────────────────────────────────
-const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers":
-        "authorization, x-client-info, apikey, content-type",
-};
-
-// ─── Helper: map Portuguese urgency → DB priority ───────────────
-function mapPriority(urgency: string): "HIGH" | "MEDIUM" | "LOW" {
-    const u = urgency.trim().toUpperCase();
-    if (u === "ALTA") return "HIGH";
-    if (u === "BAIXA") return "LOW";
-    return "MEDIUM";
-}
-
-// ─── Helper: pick initial status based on urgency ───────────────
-function pickStatus(priority: "HIGH" | "MEDIUM" | "LOW"): string {
-    return priority === "HIGH" ? "PENDING_HUMAN" : "OPEN";
-}
-
-// ─── Main Handler ───────────────────────────────────────────────
-Deno.serve(async (req: Request) => {
-    // Handle CORS preflight
-    if (req.method === "OPTIONS") {
-        return new Response("ok", { headers: corsHeaders });
-    }
+Deno.serve(async (req) => {
+    console.log("🚀 Function started!");
 
     try {
-        // ── 1. Receive & Parse Payload (Robust) ─────────────────────
         const rawText = await req.text();
-        console.log("Incoming Raw Payload:", rawText);
+        console.log("📦 Raw payload received:", rawText);
 
         let payload;
         try {
             payload = JSON.parse(rawText);
-        } catch (e) {
-            console.error("JSON Parse Error. Raw text was:", rawText);
-            return new Response(
-                JSON.stringify({ error: "Invalid JSON payload" }),
-                { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
-            );
+        } catch (err) {
+            console.error("❌ JSON Parse Error:", err);
+            return new Response("Invalid JSON", { status: 400 });
         }
 
-        // Safely extract data, supporting both Resend webhook and direct mock formats
+        // ==========================================
+        // 1. EXTRAÇÃO DE DADOS (Formato Resend)
+        // ==========================================
         const rawFrom = payload?.data?.from || payload?.email || "";
-        const customer_email = rawFrom.match(/<(.+)>/)?.[1] || rawFrom || "desconhecido@email.com";
+        const email = rawFrom.match(/<(.+)>/)?.[1] || rawFrom || "desconhecido@email.com";
         const subject = payload?.data?.subject || payload?.subject || "Sem assunto";
-        const body_text = payload?.data?.text || payload?.body_text || "Mensagem vazia";
-        const date = payload?.data?.created_at || payload?.date;
 
-        if (!customer_email || body_text === "Mensagem vazia") {
-            return new Response(
-                JSON.stringify({ error: "Missing required fields in payload" }),
-                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-        }
-        // ── 2. Shopify Integration ──────────────────────────────────
-        const shopifyUrl = Deno.env.get("SHOPIFY_STORE_URL");
-        const shopifyToken = Deno.env.get("SHOPIFY_ACCESS_TOKEN");
-        let customerName: string | null = null;
-        let orderNumber: string | null = null;
+        // Suporta e-mails em texto plano ou HTML
+        const body_text = payload?.data?.text || payload?.data?.html || payload?.body_text || "Mensagem vazia";
+        console.log(`📧 Email parsed. From: ${email}, Subject: ${subject}`);
 
-        if (shopifyUrl && shopifyToken) {
+        // ==========================================
+        // 2. CONSULTA NO SHOPIFY
+        // ==========================================
+        console.log("🛍️ Checking Shopify for customer...");
+        const shopifyStore = Deno.env.get('SHOPIFY_STORE_URL');
+        const shopifyToken = Deno.env.get('SHOPIFY_ACCESS_TOKEN');
+
+        if (shopifyStore && shopifyToken) {
             try {
-                const searchUrl =
-                    `https://${shopifyUrl}/admin/api/2024-01/customers/search.json?query=email:${customer_email}`;
-
-                const shopRes = await fetch(searchUrl, {
-                    headers: {
-                        "X-Shopify-Access-Token": shopifyToken,
-                        "Content-Type": "application/json",
-                    },
+                const shopifyRes = await fetch(`https://${shopifyStore}/admin/api/2024-01/customers/search.json?query=email:${email}`, {
+                    headers: { 'X-Shopify-Access-Token': shopifyToken }
                 });
 
-                if (shopRes.ok) {
-                    const shopData = await shopRes.json();
-                    const customer = shopData.customers?.[0];
-
-                    if (customer) {
-                        customerName = customer.first_name || null;
-
-                        // Fetch latest order for this customer
-                        const ordersUrl =
-                            `https://${shopifyUrl}/admin/api/2024-01/customers/${customer.id}/orders.json?status=any&limit=1`;
-
-                        const ordersRes = await fetch(ordersUrl, {
-                            headers: {
-                                "X-Shopify-Access-Token": shopifyToken,
-                                "Content-Type": "application/json",
-                            },
-                        });
-
-                        if (ordersRes.ok) {
-                            const ordersData = await ordersRes.json();
-                            const lastOrder = ordersData.orders?.[0];
-                            if (lastOrder) {
-                                orderNumber = String(lastOrder.order_number);
-                            }
-                        }
+                if (shopifyRes.ok) {
+                    const shopifyData = await shopifyRes.json();
+                    if (shopifyData.customers && shopifyData.customers.length > 0) {
+                        console.log(`✅ Shopify Customer Found: ${shopifyData.customers[0].first_name}`);
+                    } else {
+                        console.log("⚠️ Customer not found in Shopify.");
                     }
                 } else {
-                    console.error("Shopify API Error:", await shopRes.text());
+                    console.error("❌ Shopify API Error:", await shopifyRes.text());
                 }
-            } catch (err) {
-                console.error("Shopify Integration Error:", err);
+            } catch (shopErr) {
+                console.error("❌ Shopify Fetch Error:", shopErr);
+                // Não usamos 'throw' aqui. Se o Shopify falhar, o ticket ainda deve ser criado.
             }
+        } else {
+            console.log("⚠️ Shopify credentials missing. Skipping.");
         }
 
-        // ── 3. Google Gemini Integration (raw REST) ─────────────────
-        const geminiKey = Deno.env.get("GEMINI_API_KEY");
-        let summary = "Resumo indisponível";
-        let urgency = "MEDIA";
+        // ==========================================
+        // 3. ANÁLISE COM O GEMINI (IA)
+        // ==========================================
+        console.log("🧠 Calling Gemini...");
+        const geminiKey = Deno.env.get('GEMINI_API_KEY');
+        const prompt = `Resuma este e-mail em uma frase curta e defina a urgência (ALTA, MEDIA, BAIXA). E-mail: "${body_text}"`;
 
-        if (geminiKey) {
-            try {
-                const geminiUrl =
-                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${geminiKey}`;
+        const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${geminiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
 
-                const geminiRes = await fetch(geminiUrl, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        contents: [
-                            {
-                                parts: [
-                                    {
-                                        text: `Resuma este e-mail de suporte em um parágrafo curto e classifique a urgência (ALTA, MEDIA, BAIXA).
-
-Responda APENAS com um JSON válido no formato:
-{"summary": "...", "urgency": "ALTA|MEDIA|BAIXA"}
-
-E-mail:
-${body_text}`,
-                                    },
-                                ],
-                            },
-                        ],
-                    }),
-                });
-
-                if (geminiRes.ok) {
-                    const geminiData = await geminiRes.json();
-                    let text =
-                        geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-
-                    // Strip markdown code fences if present
-                    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-
-                    try {
-                        const parsed = JSON.parse(text);
-                        summary = parsed.summary || summary;
-                        urgency = parsed.urgency || urgency;
-                        console.log("🤖 Gemini Summary Generated:", summary);
-                    } catch {
-                        console.error("Failed to parse Gemini response as JSON:", text);
-                        // Keep defaults
-                    }
-                } else {
-                    console.error("Gemini API Error:", await geminiRes.text());
-                }
-            } catch (err) {
-                console.error("Gemini Integration Error:", err);
-            }
+        if (!geminiRes.ok) {
+            const errText = await geminiRes.text();
+            console.error("❌ Gemini API Error:", errText);
+            throw new Error("Gemini API failed");
         }
 
-        // ── 4. Database Insertion ───────────────────────────────────
-        const supabaseUrl = Deno.env.get("SUPABASE_URL");
-        const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        const geminiData = await geminiRes.json();
+        const iaSummary = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "Resumo indisponível";
+        console.log("🤖 Gemini Success:", iaSummary);
 
-        if (!supabaseUrl || !supabaseKey) {
-            throw new Error("Missing Supabase credentials (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)");
-        }
+        // Define o status inteligente baseado na resposta da IA
+        const ticketStatus = iaSummary.includes('ALTA') ? 'PENDING_HUMAN' : 'OPEN';
 
+        // ==========================================
+        // 4. SALVAMENTO NO BANCO (SUPABASE)
+        // ==========================================
+        console.log("💾 Saving to database...");
+        const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
         const supabase = createClient(supabaseUrl, supabaseKey);
 
-        const priority = mapPriority(urgency);
-        const status = pickStatus(priority);
+        const { error: dbError } = await supabase
+            .from('tickets')
+            .insert([{
+                customer_email: email,
+                subject: subject,
+                messages: iaSummary,
+                status: ticketStatus
+            }]);
 
-        const { data: ticket, error: insertError } = await supabase
-            .from("tickets")
-            .insert([
-                {
-                    subject: subject || "(sem assunto)",
-                    status,
-                    priority,
-                    customer_email,
-                    customer_name: customerName,
-                    messages: summary,
-                    channel: "email",
-                    created_at: date ? new Date(date).toISOString() : new Date().toISOString(),
-                },
-            ])
-            .select()
-            .single();
-
-        if (insertError) {
-            console.error("❌ DB INSERT ERROR:", insertError);
-            throw insertError;
+        if (dbError) {
+            console.error("❌ DB Insert Error:", dbError);
+            throw dbError;
         }
 
-        console.log("✅ SUCCESS: Ticket saved to database!");
-        // ── 5. Success Response ─────────────────────────────────────
-        return new Response(
-            JSON.stringify({ success: true, ticket }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        console.log("✅ All done successfully!");
+        return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" }, status: 200 });
 
-    } catch (err: any) {
-        console.error("🔥 CRITICAL EXECUTION ERROR:", err);
-        console.error("Function Error:", err);
-        return new Response(
-            JSON.stringify({ error: err.message }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+    } catch (error: any) {
+        console.error("🔥 CRITICAL ERROR:", error.message || error);
+        return new Response(JSON.stringify({ error: error.message }), { headers: { "Content-Type": "application/json" }, status: 500 });
     }
 });

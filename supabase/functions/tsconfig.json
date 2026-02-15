@@ -2,22 +2,23 @@
     "compilerOptions": {
         "allowJs": true,
         "lib": [
-            "esnext",
-            "DOM"
+            "esnext"
         ],
         "module": "esnext",
-        "moduleResolution": "node",
+        "moduleResolution": "bundler",
         "strict": true,
         "target": "esnext",
         "baseUrl": ".",
         "paths": {
-            "supabase": [
-                "../../node_modules/@supabase/supabase-js/dist/index.d.mts"
+            "std/*": [
+                "https://deno.land/std@0.168.0/*"
+            ],
+            "@supabase/supabase-js": [
+                "https://esm.sh/@supabase/supabase-js@2"
             ],
             "@google/generative-ai": [
-                "../../node_modules/@google/generative-ai/dist/generative-ai.d.ts"
+                "https://esm.sh/@google/generative-ai"
             ]
-        },
-        "types": []
+        }
     }
 }

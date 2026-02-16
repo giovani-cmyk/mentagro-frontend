@@ -54,7 +54,7 @@ export interface Interaction {
   ticket_id: string;
   sender: SenderType;
   message: string;
-  timestamp: string;
+  created_at: string;
 }
 
 export interface Store {

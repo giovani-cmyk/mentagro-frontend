@@ -84,8 +84,7 @@ function App() {
       ...ticket,
       store_name: order?.store_name || 'Desconhecida',
       customer_name: customer?.name || 'Cliente',
-      customer_email: customer?.email,
-      // Logic for messages summary could go here if needed
+      customer_email: customer?.email || ticket.customer_email, // AGORA ELE PRESERVA O E-MAIL
     };
   });
 

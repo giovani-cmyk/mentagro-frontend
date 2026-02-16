@@ -22,8 +22,8 @@ export const INITIAL_STATE: AppState = {
         { id: 'c2', name: 'Carlos Souza', email: 'carlos@hotmail.com', avatar: 'https://i.pravatar.cc/150?u=c', sentiment: 'NEUTRAL' },
         { id: 'c3', name: 'Bia Costa', email: 'bia@outlook.com', avatar: 'https://i.pravatar.cc/150?u=b', sentiment: 'POSITIVE' }
     ],
-    interactions: [created_at:
-        { id: 'm1', ticket_id: 't1', sender: 'CLIENT', message: 'Onde está meu pedido? Já passou do prazo!', new Date().toISOString() },
+    interactions: [
+        { id: 'm1', ticket_id: 't1', sender: 'CLIENT', message: 'Onde está meu pedido? Já passou do prazo!', created_at: new Date().toISOString() },
         { id: 'm2', ticket_id: 't1', sender: 'AI', message: 'Olá Ana. Verifiquei que houve um atraso na transportadora. Deseja abrir uma reclamação?', created_at: new Date().toISOString() },
         { id: 'm3', ticket_id: 't1', sender: 'SYSTEM', message: 'Transbordo automático: Cliente irritado detectado.', created_at: new Date().toISOString() }
     ]

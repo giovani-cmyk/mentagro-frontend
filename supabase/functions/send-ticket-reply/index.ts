@@ -10,7 +10,9 @@ Deno.serve(async (req) => {
 
   try {
     const { ticket_id, message, customer_email, subject } = await req.json()
-    const resendKey = Deno.env.get('RESEND_API_KEY')
+
+    // 👇 SUA CHAVE DA API FOI COLOCADA AQUI 👇
+    const resendKey = 're_8KfdMS8r_LMW8aPnPcZYgxZ53QM2RySFo'
 
     // Dispara o e-mail real via Resend
     const resendRes = await fetch('https://api.resend.com/emails', {
@@ -24,7 +26,11 @@ Deno.serve(async (req) => {
       })
     })
 
-    if (!resendRes.ok) throw new Error("Falha ao enviar e-mail pelo Resend")
+    if (!resendRes.ok) {
+      // Melhoramos o erro para mostrar exatamente o que o Resend reclamar, caso dê erro
+      const errorText = await resendRes.text();
+      throw new Error(`Recusado pelo Resend: ${errorText}`);
+    }
 
     // Salva a mensagem no histórico do banco e atualiza ticket
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';

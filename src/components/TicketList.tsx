@@ -18,12 +18,21 @@ export default function TicketList({ tickets, onSelectTicket }: TicketListProps)
 
     if (senha === "42202916") {
       try {
-        const { error } = await supabase
+        // 1. PRIMEIRO: Deleta todo o histórico de chat atrelado a este ticket
+        const { error: chatError } = await supabase
+          .from('interactions')
+          .delete()
+          .eq('ticket_id', ticketId);
+
+        if (chatError) throw chatError;
+
+        // 2. SEGUNDO: Deleta o ticket principal
+        const { error: ticketError } = await supabase
           .from('tickets')
           .delete()
           .eq('id', ticketId);
 
-        if (error) throw error;
+        if (ticketError) throw ticketError;
 
         alert("Ticket excluído com sucesso!");
         window.location.reload(); // Recarrega para sumir o card
@@ -118,7 +127,7 @@ export default function TicketList({ tickets, onSelectTicket }: TicketListProps)
                 >
                   <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${ticket.channel === 'email' ? 'bg-amber-400' : 'bg-blue-500'}`}></div>
 
-                  {/* BOTÃO DE EXCLUIR (NOVO) */}
+                  {/* BOTÃO DE EXCLUIR */}
                   <button
                     onClick={(e) => handleDeleteTicket(e, ticket.id)}
                     className="absolute top-3 right-3 p-1.5 rounded-full text-slate-300 hover:bg-red-50 hover:text-red-500 transition-colors z-10"

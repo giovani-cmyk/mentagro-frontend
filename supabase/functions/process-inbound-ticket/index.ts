@@ -6,16 +6,31 @@ Deno.serve(async (req) => {
         let payload: any = {};
         try { payload = JSON.parse(rawText); } catch (e) { }
 
-        // Extração do E-mail
-        const rawFrom = payload?.data?.from || payload?.email || "";
+        // 1. EXTRAÇÃO DE E-MAIL E NOME REAL
+        const rawFrom = payload?.from || payload?.data?.from || payload?.email || "";
         let email = rawFrom;
+        let name = "Visitante";
+        
         if (rawFrom.includes("<")) {
-            email = rawFrom.match(/<(.+)>/)?.[1] || rawFrom;
+            const match = rawFrom.match(/(.*)<(.+)>/);
+            if (match) {
+                name = match[1].replace(/"/g, '').trim() || "Visitante";
+                email = match[2].trim();
+            }
         }
         email = email.trim();
 
-        const subject = payload?.data?.subject || payload?.subject || "Sem assunto";
-        const body_text = payload?.data?.text || payload?.data?.html || payload?.body_text || "Mensagem vazia";
+        const subject = payload?.subject || payload?.data?.subject || "Sem assunto";
+
+        // 2. CAPTURA TOTAL DO CORPO DO E-MAIL
+        const body_text = (
+            payload?.text || 
+            payload?.data?.text || 
+            payload?.html || 
+            payload?.data?.html || 
+            payload?.body_text || 
+            "Mensagem vazia"
+        ).trim();
 
         const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
@@ -28,76 +43,78 @@ Deno.serve(async (req) => {
         let customerData: any = null;
         let ordersData: any[] = [];
         let latestOrderId = null;
-        let matchedStoreName = "Desconhecida";
+        let matchedStoreName = "Dúvida Geral"; // Nome que aparece quando não tem pedido
 
-        // 🔥 O SISTEMA AGORA É MULTI-TENANT: Vai buscar TODAS as lojas registadas no seu painel!
+        // BUSCA NAS LOJAS DO PAINEL
         const { data: storesList } = await supabase.from('stores').select('*');
 
         if (storesList && storesList.length > 0) {
             for (const store of storesList) {
                 const shopifyStore = store.shopify_url;
-                const shopifyToken = store.shopify_token; // O novo token vindo diretamente do seu Front-end
-
+                const shopifyToken = store.shopify_token;
+                
                 if (!shopifyStore || !shopifyToken) continue;
 
                 try {
                     const shopifyRes = await fetch(`https://${shopifyStore}/admin/api/2024-01/customers/search.json?query=email:${email}`, {
                         headers: { 'X-Shopify-Access-Token': shopifyToken }
                     });
-
+                    
                     if (shopifyRes.ok) {
                         const data = await shopifyRes.json();
                         if (data.customers && data.customers.length > 0) {
                             isCustomer = true;
                             customerData = data.customers[0];
                             matchedStoreName = store.name;
+                            name = `${customerData.first_name || ''} ${customerData.last_name || ''}`.trim() || name;
 
-                            // 🟢 MÁGICA: Detetou atividade na loja? Atualiza o status para ONLINE no seu painel!
                             await supabase.from('stores').update({ last_sync: new Date().toISOString() }).eq('id', store.id);
 
                             const ordersRes = await fetch(`https://${shopifyStore}/admin/api/2024-01/customers/${customerData.id}/orders.json?status=any`, {
                                 headers: { 'X-Shopify-Access-Token': shopifyToken }
                             });
-
+                            
                             if (ordersRes.ok) {
                                 const oData = await ordersRes.json();
                                 ordersData = oData.orders || [];
                             }
-
-                            // Salva dados no banco
-                            try {
-                                await supabase.from('customers').upsert({
-                                    id: customerData.id.toString(),
-                                    name: `${customerData.first_name || ''} ${customerData.last_name || ''}`.trim() || 'Cliente',
-                                    email: email,
-                                    avatar: `https://ui-avatars.com/api/?name=${customerData.first_name || 'C'}&background=0D8ABC&color=fff`,
-                                    sentiment: 'NEUTRAL'
-                                });
-                                if (ordersData.length > 0) {
-                                    latestOrderId = ordersData[0].id.toString();
-                                    const mappedOrders = ordersData.map(o => ({
-                                        id: o.id.toString(),
-                                        store_name: matchedStoreName, // Usa o nome real da loja!
-                                        customer_id: customerData.id.toString(),
-                                        status: o.fulfillment_status ? 'ENVIADO' : 'PROCESSANDO',
-                                        tracking: o.fulfillments?.[0]?.tracking_number || 'Aguardando rastreio'
-                                    }));
-                                    await supabase.from('orders').upsert(mappedOrders);
-                                }
-                            } catch (e) { }
-
-                            break; // Se encontrou o cliente nesta loja, para de procurar nas outras!
+                            break; 
                         }
                     }
-                } catch (err) { }
+                } catch (err) {}
             }
         }
 
-        let ticketStatus = 'OPEN';
-        let iaSummary = "Transbordo Manual: Cliente não encontrado nas lojas registadas.";
+        // SALVA O PERFIL (COMPRADOR OU VISITANTE) NO BANCO
+        const customerId = isCustomer ? customerData.id.toString() : email;
+        try {
+            await supabase.from('customers').upsert({
+                id: customerId,
+                name: name,
+                email: email,
+                avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0D8ABC&color=fff`,
+                sentiment: 'NEUTRAL'
+            });
+            
+            if (ordersData.length > 0) {
+                latestOrderId = ordersData[0].id.toString();
+                const mappedOrders = ordersData.map(o => ({
+                    id: o.id.toString(),
+                    store_name: matchedStoreName,
+                    customer_id: customerId,
+                    status: o.fulfillment_status ? 'ENVIADO' : 'PROCESSANDO',
+                    tracking: o.fulfillments?.[0]?.tracking_number || 'Aguardando rastreio'
+                }));
+                await supabase.from('orders').upsert(mappedOrders);
+            }
+        } catch(e) {}
+
+        let ticketStatus = 'OPEN'; 
+        let iaSummary = "Processando via IA...";
         let iaFullReply = "";
 
-        if (isCustomer && geminiKey) {
+        // 🔥 A IA AGORA RESPONDE A TODOS (COMPRADORES E VISITANTES)
+        if (geminiKey) { 
             let customRules = "";
             try {
                 const { data: settingsData } = await supabase.from('settings').select('bot_prompt').eq('id', 1).single();
@@ -105,33 +122,29 @@ Deno.serve(async (req) => {
                     const promptConfig = typeof settingsData.bot_prompt === 'string' ? JSON.parse(settingsData.bot_prompt) : settingsData.bot_prompt;
                     const defaultRules = promptConfig.padrão?.map((f: any) => `${f.label}: ${f.content}`).join('\n') || '';
                     const customFields = promptConfig.personalizadas?.map((f: any) => `${f.label}: ${f.content}`).join('\n') || '';
-                    customRules = `REGRAS DE ATENDIMENTO DA EMPRESA:\n${defaultRules}\n${customFields}`;
+                    customRules = `REGRAS DE ATENDIMENTO:\n${defaultRules}\n${customFields}`;
                 }
-            } catch (e) { }
+            } catch(e) { }
 
-            const ordersInfo = ordersData.length > 0
-                ? ordersData.map(o => `Pedido: ${o.name} | Pgto: ${o.financial_status} | Status Envio: ${o.fulfillment_status || 'Não enviado'} | Rastreio: ${o.fulfillments?.[0]?.tracking_number || 'Sem rastreio'}`).join('\n')
-                : "Nenhum pedido atrelado a este cliente.";
+            const ordersInfo = isCustomer 
+                ? (ordersData.length > 0 ? ordersData.map(o => `Pedido: ${o.name} | Pgto: ${o.financial_status} | Status Envio: ${o.fulfillment_status || 'Não enviado'} | Rastreio: ${o.fulfillments?.[0]?.tracking_number || 'Sem rastreio'}`).join('\n') : "Nenhum pedido atrelado a este cliente.")
+                : "ALERTA: Este e-mail NÃO está cadastrado na loja (Visitante ou E-mail Diferente). Se ele perguntar de um pedido, avise que não localizou compras com este e-mail e peça gentilmente o CPF ou o número do pedido.";
 
             const prompt = `
-                Você é um agente de suporte de excelência da loja ${matchedStoreName}. O cliente ${customerData?.first_name || ''} enviou esta mensagem: "${body_text}".
+                Você é um agente de suporte de excelência da loja OmniDesk. O usuário ${name} enviou esta mensagem: "${body_text}".
                 
-                DADOS REAIS DO SISTEMA (PEDIDOS DO CLIENTE):
+                DADOS DO SISTEMA:
                 ${ordersInfo}
 
                 ${customRules}
 
-                REGRAS ABSOLUTAS DE SEGURANÇA E CONDUTA:
-                1. NUNCA invente prazos de entrega, processamento, separação ou postagem.
-                2. NUNCA invente códigos de rastreio. Se constar "Sem rastreio", informe que o código ainda será gerado.
-                3. SE a mensagem do cliente estiver vazia ou for muito curta, peça gentilmente para ele detalhar a dúvida e, proativamente, resuma os status dos pedidos dele baseando-se ESTRITAMENTE nos "DADOS REAIS" acima.
-                4. SEJA LITERAL E DIRETO. Não presuma políticas da loja.
-                5. PROIBIDO USAR MARKDOWN: Nunca use asteriscos (* ou **) para negrito, nem listas complexas. Escreva a resposta em texto plano, limpo e direto.
-                6. SEJA CONCISO E RESUMIDO: Vá direto ao ponto. Não escreva textos longos ou redundantes. O cliente quer uma resposta rápida e clara.
-
-                Sua tarefa:
-                Escreva a resposta e retorne EXATAMENTE no formato JSON abaixo:
-                {"resumo": "Breve resumo da situação", "resposta_completa": "Sua resposta final em texto plano e curto"}
+                TAREFA:
+                - Responda de forma curta, clara e proativa. 
+                - NUNCA invente códigos ou prazos.
+                - Proibido usar Markdown (asteriscos). Escreva texto limpo.
+                
+                Retorne EXATAMENTE no formato JSON:
+                {"resumo": "Breve resumo do que foi falado", "resposta_completa": "Sua resposta curta para o cliente"}
             `;
 
             try {
@@ -146,10 +159,10 @@ Deno.serve(async (req) => {
                     const aiText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
                     const jsonMatch = aiText.match(/\{[\s\S]*\}/);
                     const cleanJson = jsonMatch ? jsonMatch[0] : "{}";
-
+                    
                     try {
                         const aiResult = JSON.parse(cleanJson);
-                        iaSummary = aiResult.resumo || "IA gerou a resposta automática.";
+                        iaSummary = aiResult.resumo;
                         iaFullReply = aiResult.resposta_completa;
                         ticketStatus = 'WAITING';
 
@@ -160,42 +173,26 @@ Deno.serve(async (req) => {
                                 body: JSON.stringify({
                                     from: 'Suporte Mentagro <support@empireclubks.com>',
                                     to: email,
-                                    subject: `Re: ${subject || 'Seu Atendimento'}`,
+                                    subject: `Re: ${subject}`,
                                     text: iaFullReply
                                 })
                             });
                         }
-                    } catch (e: any) {
-                        ticketStatus = 'OPEN';
-                        iaSummary = `Transbordo: IA falhou ao formatar a resposta.`;
-                    }
+                    } catch (e) { ticketStatus = 'OPEN'; }
                 }
-            } catch (e: any) {
-                ticketStatus = 'OPEN';
-            }
+            } catch (e) { ticketStatus = 'OPEN'; }
         }
 
         const ticketPayload: any = { customer_email: email, subject: subject, messages: iaSummary, status: ticketStatus, priority: isCustomer ? 'MEDIUM' : 'LOW' };
         if (latestOrderId) ticketPayload.order_id = latestOrderId;
 
-        let ticketRecord;
-        try {
-            const { data, error: dbError } = await supabase.from('tickets').insert([ticketPayload]).select().single();
-            if (dbError) throw dbError;
-            ticketRecord = data;
-        } catch (e) {
-            delete ticketPayload.order_id;
-            const { data } = await supabase.from('tickets').insert([ticketPayload]).select().single();
-            ticketRecord = data;
-        }
+        const { data: ticketRecord } = await supabase.from('tickets').insert([ticketPayload]).select().single();
 
         if (ticketRecord) {
-            try {
-                await supabase.from('interactions').insert([{ ticket_id: ticketRecord.id, sender: 'CLIENT', message: body_text }]);
-                if (ticketStatus === 'WAITING' && iaFullReply) {
-                    await supabase.from('interactions').insert([{ ticket_id: ticketRecord.id, sender: 'AI', message: iaFullReply }]);
-                }
-            } catch (e) { }
+            await supabase.from('interactions').insert([{ ticket_id: ticketRecord.id, sender: 'CLIENT', message: body_text }]);
+            if (ticketStatus === 'WAITING' && iaFullReply) {
+                await supabase.from('interactions').insert([{ ticket_id: ticketRecord.id, sender: 'AI', message: iaFullReply }]);
+            }
         }
 
         return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" }, status: 200 });

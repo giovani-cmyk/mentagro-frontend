@@ -25,10 +25,6 @@ function App() {
   const [storeCount, setStoreCount] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
 
-  // Use mock data for initial load if needed, or stick to fetching
-  // For now, let's keep the fetch logic but fallback to mock if empty/error?
-  // Current logic fetches from Supabase.
-
   const fetchAllData = async () => {
     if (!user) return;
     setLoading(true);
@@ -48,8 +44,7 @@ function App() {
       const { data: customersData } = await supabase.from('customers').select('*');
       const { data: interactionsData } = await supabase.from('interactions').select('*');
 
-      // Type casting or validation might be needed here, assuming Supabase returns matching shape
-      if (ticketsData) setTickets(ticketsData as unknown as Ticket[]); // dangerous cast, but quick fix for now
+      if (ticketsData) setTickets(ticketsData as unknown as Ticket[]);
       if (storesData) {
         setStores(storesData as unknown as Store[]);
         setStoreCount(storesData.length);
@@ -60,9 +55,6 @@ function App() {
 
     } catch (error) {
       console.error("Erro na sincronização:", error);
-      // Fallback to mock data on error?
-      // setTickets(INITIAL_STATE.tickets); 
-      // etc.
     } finally {
       setLoading(false);
     }
@@ -72,19 +64,18 @@ function App() {
     fetchAllData();
   }, [user]);
 
-  // Enriched Tickets Logic
+  // 🔥 ENRICHED TICKETS LOGIC (ATUALIZADA)
   const enrichedTickets = tickets.map(ticket => {
     const order = orders.find(o => o.id === ticket.order_id);
-    const customer = customers.find(c => c.id === order?.customer_id);
-    // Note: mockData order has store_name like 'Loja Fitness (01)'. 
-    // Actual Store object has 'name'. Match might be fuzzy or exact. 
-    // For now, simpler:
+
+    // Tenta achar o cliente pelo pedido. Se não achar (visitante), acha pelo E-mail!
+    const customer = customers.find(c => c.id === order?.customer_id) || customers.find(c => c.email === ticket.customer_email);
 
     return {
       ...ticket,
-      store_name: order?.store_name || 'Desconhecida',
-      customer_name: customer?.name || 'Cliente',
-      customer_email: customer?.email || ticket.customer_email, // AGORA ELE PRESERVA O E-MAIL
+      store_name: order?.store_name || 'Dúvida Geral',
+      customer_name: customer?.name || 'Visitante',
+      customer_email: customer?.email || ticket.customer_email,
     };
   });
 
@@ -98,12 +89,9 @@ function App() {
   };
 
   if (!user) {
-    // We can use INITIAL_STATE user for dev convenience if valid
-    // setUser(INITIAL_STATE.user);
     return <LoginScreen onLogin={(u: any) => setUser(u)} />;
   }
 
-  // Helper for loading state
   if (loading && tickets.length === 0) {
     return (
       <div className="flex h-screen items-center justify-center text-slate-400 gap-2 font-sans">
@@ -116,10 +104,12 @@ function App() {
   // Derived data for modal
   let selectedTicketData = null;
   if (selectedTicketId) {
-    const ticket = enrichedTickets.find(t => t.id === selectedTicketId); // Use enriched
+    const ticket = enrichedTickets.find(t => t.id === selectedTicketId);
     if (ticket) {
       const order = orders.find(o => o.id === ticket.order_id);
-      const customer = customers.find(c => c.id === order?.customer_id);
+
+      // Garante que os dados do cliente vão pro Modal, seja ele comprador ou visitante
+      const customer = customers.find(c => c.id === order?.customer_id) || customers.find(c => c.email === ticket.customer_email);
       const ticketMsgs = interactions.filter(i => i.ticket_id === ticket.id);
 
       selectedTicketData = { ticket, order, customer, ticketMsgs };
@@ -156,8 +146,8 @@ function App() {
       {selectedTicketId && selectedTicketData && (
         <TicketDetail
           ticket={selectedTicketData.ticket}
-          order={selectedTicketData.order || { id: 'unknown', store_name: 'Desconhecida', status: 'N/A', customer_id: '', tracking: '' }}
-          customer={selectedTicketData.customer || { id: 'unknown', name: 'Desconhecido', email: '-', avatar: '', sentiment: 'NEUTRAL' }}
+          order={selectedTicketData.order || { id: 'unknown', store_name: 'Dúvida Geral', status: 'N/A', customer_id: '', tracking: '' }}
+          customer={selectedTicketData.customer || { id: 'unknown', name: 'Visitante', email: selectedTicketData.ticket.customer_email || '-', avatar: `https://ui-avatars.com/api/?name=V&background=0D8ABC&color=fff`, sentiment: 'NEUTRAL' }}
           interactions={selectedTicketData.ticketMsgs}
           onClose={handleCloseTicket}
         />

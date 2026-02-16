@@ -23,7 +23,14 @@ export default function StoreManager({ onUpdateCount }: StoreManagerProps) {
   }, []);
 
   async function loadStores() {
-    const { data } = await supabase.from('stores').select('*').order('created_at');
+    // 🛡️ Alarme de erro adicionado aqui
+    const { data, error } = await supabase.from('stores').select('*').order('created_at');
+
+    if (error) {
+      alert("Erro ao carregar as lojas: " + error.message);
+      return;
+    }
+
     if (data) {
       const typedData = data as unknown as Store[];
       setStores(typedData);
@@ -34,14 +41,19 @@ export default function StoreManager({ onUpdateCount }: StoreManagerProps) {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Quando cria, já regista a sincronização para ficar ONLINE automaticamente
+    // Quando cria, já registra a sincronização para ficar ONLINE automaticamente
     const payload = { ...formData, last_sync: new Date().toISOString() };
 
     if (editingStore) {
-      await supabase.from('stores').update(formData).eq('id', editingStore.id);
+      // 🛡️ Alarme de erro na atualização
+      const { error } = await supabase.from('stores').update(formData).eq('id', editingStore.id);
+      if (error) alert("Erro ao atualizar loja: " + error.message);
     } else {
-      await supabase.from('stores').insert([payload]);
+      // 🛡️ Alarme de erro na criação
+      const { error } = await supabase.from('stores').insert([payload]);
+      if (error) alert("Erro ao cadastrar loja: " + error.message);
     }
+
     setFormData({ name: '', shopify_url: '', shopify_token: '' });
     setEditingStore(null);
     setIsModalOpen(false);
@@ -50,7 +62,8 @@ export default function StoreManager({ onUpdateCount }: StoreManagerProps) {
 
   const handleDelete = async (id: string) => {
     if (confirm("Tem certeza que deseja remover esta loja? A automação será interrompida.")) {
-      await supabase.from('stores').delete().eq('id', id);
+      const { error } = await supabase.from('stores').delete().eq('id', id);
+      if (error) alert("Erro ao excluir: " + error.message);
       loadStores();
     }
   };
@@ -116,9 +129,9 @@ export default function StoreManager({ onUpdateCount }: StoreManagerProps) {
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase">URL Shopify</label>
                   <input required className="w-full bg-slate-50 p-3 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="exemplo.myshopify.com" value={formData.shopify_url} onChange={e => setFormData({ ...formData, shopify_url: e.target.value })} />
+                    placeholder="loja.myshopify.com" value={formData.shopify_url} onChange={e => setFormData({ ...formData, shopify_url: e.target.value })} />
                 </div>
-                {/* 👇 O NOVO CAMPO DE TOKEN ESTÁ AQUI 👇 */}
+                {/* 👇 CAMPO DE TOKEN DA API */}
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase">Token de Acesso (API)</label>
                   <input required type="password" className="w-full bg-slate-50 p-3 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"

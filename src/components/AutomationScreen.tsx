@@ -25,7 +25,6 @@ const INITIAL_SCHEMA: SettingsData = {
 
 export default function AutomationScreen() {
   const [data, setData] = useState<SettingsData>(INITIAL_SCHEMA);
-  const [isOnline, setIsOnline] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,7 +41,6 @@ export default function AutomationScreen() {
       if (res && res.bot_prompt) {
         const parsedData = typeof res.bot_prompt === 'string' ? JSON.parse(res.bot_prompt) : res.bot_prompt;
 
-        // Validação: se o JSON vier sem a chave "padrão", usamos o esquema inicial
         if (parsedData.padrão) {
           setData(parsedData);
         } else {
@@ -51,9 +49,7 @@ export default function AutomationScreen() {
       }
     } catch (err) {
       console.error("Erro ao carregar configurações, usando esquema padrão:", err);
-      setData(INITIAL_SCHEMA); // Força a exibição dos campos mesmo com erro no banco
-    } finally {
-      setIsOnline(true);
+      setData(INITIAL_SCHEMA);
     }
   }
 

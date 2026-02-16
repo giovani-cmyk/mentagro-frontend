@@ -9,13 +9,14 @@ interface StoreManagerProps {
 interface FormData {
   name: string;
   shopify_url: string;
+  shopify_token: string;
 }
 
 export default function StoreManager({ onUpdateCount }: StoreManagerProps) {
   const [stores, setStores] = useState<Store[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStore, setEditingStore] = useState<Store | null>(null);
-  const [formData, setFormData] = useState<FormData>({ name: '', shopify_url: '' });
+  const [formData, setFormData] = useState<FormData>({ name: '', shopify_url: '', shopify_token: '' });
 
   useEffect(() => {
     loadStores();
@@ -24,21 +25,24 @@ export default function StoreManager({ onUpdateCount }: StoreManagerProps) {
   async function loadStores() {
     const { data } = await supabase.from('stores').select('*').order('created_at');
     if (data) {
-      // Cast the data to match Store interface since strict type checking is enabled
       const typedData = data as unknown as Store[];
       setStores(typedData);
-      onUpdateCount(typedData.length); // Atualiza o número na Sidebar
+      onUpdateCount(typedData.length);
     }
   }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Quando cria, já regista a sincronização para ficar ONLINE automaticamente
+    const payload = { ...formData, last_sync: new Date().toISOString() };
+
     if (editingStore) {
       await supabase.from('stores').update(formData).eq('id', editingStore.id);
     } else {
-      await supabase.from('stores').insert([formData]);
+      await supabase.from('stores').insert([payload]);
     }
-    setFormData({ name: '', shopify_url: '' });
+    setFormData({ name: '', shopify_url: '', shopify_token: '' });
     setEditingStore(null);
     setIsModalOpen(false);
     loadStores();
@@ -52,7 +56,7 @@ export default function StoreManager({ onUpdateCount }: StoreManagerProps) {
   };
 
   return (
-    <div className="p-8 bg-slate-50 h-full overflow-y-auto">
+    <div className="p-8 bg-slate-50 h-full overflow-y-auto font-sans">
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-10">
           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
@@ -60,14 +64,13 @@ export default function StoreManager({ onUpdateCount }: StoreManagerProps) {
             Hub de Lojas ({stores.length})
           </h1>
           <button
-            onClick={() => { setEditingStore(null); setFormData({ name: '', shopify_url: '' }); setIsModalOpen(true); }}
+            onClick={() => { setEditingStore(null); setFormData({ name: '', shopify_url: '', shopify_token: '' }); setIsModalOpen(true); }}
             className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 hover:bg-blue-600 transition-all"
           >
             <span className="material-symbols-outlined">add</span> Conectar Nova Loja
           </button>
         </div>
 
-        {/* LISTAGEM DINÂMICA */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {stores.map(store => (
             <div key={store.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm group">
@@ -75,9 +78,8 @@ export default function StoreManager({ onUpdateCount }: StoreManagerProps) {
                 <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-blue-600">
                   <span className="material-symbols-outlined">storefront</span>
                 </div>
-                <div className={`px-3 py-1 rounded-full text-[10px] font-black ${(new Date().getTime() - new Date(store.last_sync).getTime()) / 1000 / 60 < 15 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
-                  }`}>
-                  {(new Date().getTime() - new Date(store.last_sync).getTime()) / 1000 / 60 < 15 ? 'CONECTADO' : 'OFFLINE'}
+                <div className={`px-3 py-1 rounded-full text-[10px] font-black ${(new Date().getTime() - new Date(store.last_sync || 0).getTime()) / 1000 / 60 < 15 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                  {(new Date().getTime() - new Date(store.last_sync || 0).getTime()) / 1000 / 60 < 15 ? 'ONLINE' : 'OFFLINE'}
                 </div>
               </div>
               <h3 className="font-bold text-slate-800 text-lg">{store.name}</h3>
@@ -85,7 +87,7 @@ export default function StoreManager({ onUpdateCount }: StoreManagerProps) {
 
               <div className="flex justify-between pt-4 border-t border-slate-50">
                 <button
-                  onClick={() => { setEditingStore(store); setFormData({ name: store.name, shopify_url: store.shopify_url }); setIsModalOpen(true); }}
+                  onClick={() => { setEditingStore(store); setFormData({ name: store.name, shopify_url: store.shopify_url, shopify_token: store.shopify_token || '' }); setIsModalOpen(true); }}
                   className="material-symbols-outlined text-slate-300 hover:text-blue-600 transition-colors"
                 >
                   settings
@@ -101,7 +103,6 @@ export default function StoreManager({ onUpdateCount }: StoreManagerProps) {
           ))}
         </div>
 
-        {/* MODAL DE CADASTRO/EDIÇÃO */}
         {isModalOpen && (
           <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50">
             <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md">
@@ -115,7 +116,13 @@ export default function StoreManager({ onUpdateCount }: StoreManagerProps) {
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase">URL Shopify</label>
                   <input required className="w-full bg-slate-50 p-3 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="loja.myshopify.com" value={formData.shopify_url} onChange={e => setFormData({ ...formData, shopify_url: e.target.value })} />
+                    placeholder="exemplo.myshopify.com" value={formData.shopify_url} onChange={e => setFormData({ ...formData, shopify_url: e.target.value })} />
+                </div>
+                {/* 👇 O NOVO CAMPO DE TOKEN ESTÁ AQUI 👇 */}
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase">Token de Acesso (API)</label>
+                  <input required type="password" className="w-full bg-slate-50 p-3 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="shpat_..." value={formData.shopify_token} onChange={e => setFormData({ ...formData, shopify_token: e.target.value })} />
                 </div>
                 <div className="flex gap-3 mt-8">
                   <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 font-bold text-slate-500">Cancelar</button>

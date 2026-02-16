@@ -72,3 +72,11 @@ export interface AppState {
   customers: Customer[];
   interactions: Interaction[];
 }
+export interface Store {
+  id: string;
+  name: string;
+  shopify_url: string;
+  shopify_token?: string; // 🔥 O NOVO CAMPO
+  last_sync: string;
+  created_at?: string;
+}

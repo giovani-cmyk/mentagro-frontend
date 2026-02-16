@@ -21,8 +21,6 @@ Deno.serve(async (req) => {
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
         const supabase = createClient(supabaseUrl, supabaseKey);
 
-        const shopifyStore = Deno.env.get('SHOPIFY_STORE_URL');
-        const shopifyToken = Deno.env.get('SHOPIFY_ACCESS_TOKEN');
         const geminiKey = Deno.env.get('GEMINI_API_KEY');
         const resendKey = 're_8KfdMS8r_LMW8aPnPcZYgxZ53QM2RySFo';
 
@@ -30,56 +28,73 @@ Deno.serve(async (req) => {
         let customerData: any = null;
         let ordersData: any[] = [];
         let latestOrderId = null;
+        let matchedStoreName = "Desconhecida";
 
-        // BUSCA NO SHOPIFY
-        if (shopifyStore && shopifyToken) {
-            try {
-                const shopifyRes = await fetch(`https://${shopifyStore}/admin/api/2024-01/customers/search.json?query=email:${email}`, {
-                    headers: { 'X-Shopify-Access-Token': shopifyToken }
-                });
+        // 🔥 O SISTEMA AGORA É MULTI-TENANT: Vai buscar TODAS as lojas registadas no seu painel!
+        const { data: storesList } = await supabase.from('stores').select('*');
 
-                if (shopifyRes.ok) {
-                    const data = await shopifyRes.json();
-                    if (data.customers && data.customers.length > 0) {
-                        isCustomer = true;
-                        customerData = data.customers[0];
+        if (storesList && storesList.length > 0) {
+            for (const store of storesList) {
+                const shopifyStore = store.shopify_url;
+                const shopifyToken = store.shopify_token; // O novo token vindo diretamente do seu Front-end
 
-                        const ordersRes = await fetch(`https://${shopifyStore}/admin/api/2024-01/customers/${customerData.id}/orders.json?status=any`, {
-                            headers: { 'X-Shopify-Access-Token': shopifyToken }
-                        });
-                        if (ordersRes.ok) {
-                            const oData = await ordersRes.json();
-                            ordersData = oData.orders || [];
-                        }
+                if (!shopifyStore || !shopifyToken) continue;
 
-                        // Salva dados no banco
-                        try {
-                            await supabase.from('customers').upsert({
-                                id: customerData.id.toString(),
-                                name: `${customerData.first_name || ''} ${customerData.last_name || ''}`.trim() || 'Cliente',
-                                email: email,
-                                avatar: `https://ui-avatars.com/api/?name=${customerData.first_name || 'C'}&background=0D8ABC&color=fff`,
-                                sentiment: 'NEUTRAL'
+                try {
+                    const shopifyRes = await fetch(`https://${shopifyStore}/admin/api/2024-01/customers/search.json?query=email:${email}`, {
+                        headers: { 'X-Shopify-Access-Token': shopifyToken }
+                    });
+
+                    if (shopifyRes.ok) {
+                        const data = await shopifyRes.json();
+                        if (data.customers && data.customers.length > 0) {
+                            isCustomer = true;
+                            customerData = data.customers[0];
+                            matchedStoreName = store.name;
+
+                            // 🟢 MÁGICA: Detetou atividade na loja? Atualiza o status para ONLINE no seu painel!
+                            await supabase.from('stores').update({ last_sync: new Date().toISOString() }).eq('id', store.id);
+
+                            const ordersRes = await fetch(`https://${shopifyStore}/admin/api/2024-01/customers/${customerData.id}/orders.json?status=any`, {
+                                headers: { 'X-Shopify-Access-Token': shopifyToken }
                             });
-                            if (ordersData.length > 0) {
-                                latestOrderId = ordersData[0].id.toString();
-                                const mappedOrders = ordersData.map(o => ({
-                                    id: o.id.toString(),
-                                    store_name: shopifyStore.split('.')[0].toUpperCase(),
-                                    customer_id: customerData.id.toString(),
-                                    status: o.fulfillment_status ? 'ENVIADO' : 'PROCESSANDO',
-                                    tracking: o.fulfillments?.[0]?.tracking_number || 'Aguardando rastreio'
-                                }));
-                                await supabase.from('orders').upsert(mappedOrders);
+
+                            if (ordersRes.ok) {
+                                const oData = await ordersRes.json();
+                                ordersData = oData.orders || [];
                             }
-                        } catch (e) { }
+
+                            // Salva dados no banco
+                            try {
+                                await supabase.from('customers').upsert({
+                                    id: customerData.id.toString(),
+                                    name: `${customerData.first_name || ''} ${customerData.last_name || ''}`.trim() || 'Cliente',
+                                    email: email,
+                                    avatar: `https://ui-avatars.com/api/?name=${customerData.first_name || 'C'}&background=0D8ABC&color=fff`,
+                                    sentiment: 'NEUTRAL'
+                                });
+                                if (ordersData.length > 0) {
+                                    latestOrderId = ordersData[0].id.toString();
+                                    const mappedOrders = ordersData.map(o => ({
+                                        id: o.id.toString(),
+                                        store_name: matchedStoreName, // Usa o nome real da loja!
+                                        customer_id: customerData.id.toString(),
+                                        status: o.fulfillment_status ? 'ENVIADO' : 'PROCESSANDO',
+                                        tracking: o.fulfillments?.[0]?.tracking_number || 'Aguardando rastreio'
+                                    }));
+                                    await supabase.from('orders').upsert(mappedOrders);
+                                }
+                            } catch (e) { }
+
+                            break; // Se encontrou o cliente nesta loja, para de procurar nas outras!
+                        }
                     }
-                }
-            } catch (err) { }
+                } catch (err) { }
+            }
         }
 
         let ticketStatus = 'OPEN';
-        let iaSummary = "Transbordo Manual: Cliente não encontrado.";
+        let iaSummary = "Transbordo Manual: Cliente não encontrado nas lojas registadas.";
         let iaFullReply = "";
 
         if (isCustomer && geminiKey) {
@@ -98,9 +113,8 @@ Deno.serve(async (req) => {
                 ? ordersData.map(o => `Pedido: ${o.name} | Pgto: ${o.financial_status} | Status Envio: ${o.fulfillment_status || 'Não enviado'} | Rastreio: ${o.fulfillments?.[0]?.tracking_number || 'Sem rastreio'}`).join('\n')
                 : "Nenhum pedido atrelado a este cliente.";
 
-            // 🔥 PROMPT COM NOVAS REGRAS DE FORMATAÇÃO E TAMANHO
             const prompt = `
-                Você é um agente de suporte de excelência. O cliente ${customerData?.first_name || ''} enviou esta mensagem: "${body_text}".
+                Você é um agente de suporte de excelência da loja ${matchedStoreName}. O cliente ${customerData?.first_name || ''} enviou esta mensagem: "${body_text}".
                 
                 DADOS REAIS DO SISTEMA (PEDIDOS DO CLIENTE):
                 ${ordersInfo}
@@ -137,12 +151,10 @@ Deno.serve(async (req) => {
                         const aiResult = JSON.parse(cleanJson);
                         iaSummary = aiResult.resumo || "IA gerou a resposta automática.";
                         iaFullReply = aiResult.resposta_completa;
-                        ticketStatus = 'WAITING'; // Deixa em espera
+                        ticketStatus = 'WAITING';
 
-                        // 🔥 DISPARO AUTOMÁTICO OFICIAL DO E-MAIL
                         if (resendKey) {
-                            console.log("Tentando disparar e-mail via Resend...");
-                            const resendCall = await fetch('https://api.resend.com/emails', {
+                            await fetch('https://api.resend.com/emails', {
                                 method: 'POST',
                                 headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -152,9 +164,6 @@ Deno.serve(async (req) => {
                                     text: iaFullReply
                                 })
                             });
-
-                            const resendResponseText = await resendCall.text();
-                            console.log("Resposta do Resend:", resendResponseText);
                         }
                     } catch (e: any) {
                         ticketStatus = 'OPEN';
@@ -166,7 +175,6 @@ Deno.serve(async (req) => {
             }
         }
 
-        // CRIAÇÃO DO TICKET
         const ticketPayload: any = { customer_email: email, subject: subject, messages: iaSummary, status: ticketStatus, priority: isCustomer ? 'MEDIUM' : 'LOW' };
         if (latestOrderId) ticketPayload.order_id = latestOrderId;
 
@@ -181,7 +189,6 @@ Deno.serve(async (req) => {
             ticketRecord = data;
         }
 
-        // HISTÓRICO DE MENSAGENS NO APP
         if (ticketRecord) {
             try {
                 await supabase.from('interactions').insert([{ ticket_id: ticketRecord.id, sender: 'CLIENT', message: body_text }]);

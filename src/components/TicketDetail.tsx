@@ -119,12 +119,9 @@ export default function TicketDetail({ ticket, order, customer, interactions, on
               onChange={(e) => handleUpdateStatus(e.target.value as TicketStatus)}
               className={`pl-3 pr-8 py-2 rounded-lg text-xs font-bold uppercase tracking-wider border cursor-pointer outline-none appearance-none transition-all hover:opacity-80 ${getStatusStyle(currentStatus)}`}
             >
-              <option value="OPEN">🔴 Aberto</option>
-              <option value="PENDING_HUMAN">🔴 Transbordo</option>
-              <option value="IN_PROGRESS">🟡 Em Andamento</option>
-              <option value="WAITING">🟡 Aguardando</option>
-              <option value="RESOLVED">🟢 Resolvido</option>
-              <option value="CLOSED">🟢 Fechado</option>
+              <option value="OPEN">🔴 Em Aberto</option>
+              <option value="WAITING">🟡 Em Espera</option>
+              <option value="RESOLVED">🟢 Concluído</option>
             </select>
             <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">
               <span className="material-symbols-outlined text-xs">expand_more</span>

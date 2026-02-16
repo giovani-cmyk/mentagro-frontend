@@ -25,14 +25,11 @@ export default function AutomationScreen() {
   async function loadSettings() {
     const { data: res } = await supabase.from('settings').select('*').eq('id', 1).single();
     if (res && res.bot_prompt) {
-      // Parse if string, otherwise use directly
       const parsedData = typeof res.bot_prompt === 'string' ? JSON.parse(res.bot_prompt) : res.bot_prompt;
       setData(parsedData);
 
-      if (res.last_seen) {
-        const lastSeen = new Date(res.last_seen);
-        setIsOnline((new Date().getTime() - lastSeen.getTime()) / 1000 / 60 < 5);
-      }
+      // Como a nossa IA é Serverless (Sob Demanda), ela está sempre pronta e operacional!
+      setIsOnline(true);
     }
   }
 

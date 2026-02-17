@@ -15,7 +15,7 @@ export default function LoginScreen({ onLogin }) {
 
     // Simulação de verificação de segurança (fake API delay)
     setTimeout(() => {
-      
+
       // 👇 LISTA DE USUÁRIOS PERMITIDOS
       const validUsers = [
         {
@@ -31,6 +31,14 @@ export default function LoginScreen({ onLogin }) {
           email: 'jeffersonsilva857@gmail.com',
           password: 'A1b2c3d4e5@',
           role: 'Analista'
+        },
+        // 👇 NOVO ACESSO ADICIONADO AQUI
+        {
+          id: 'admin-03',
+          name: 'Zorbah Candido',
+          email: 'zorbahcandido@gmail.com',
+          password: '@1b2c3d4E5*!',
+          role: 'Admin'
         }
       ];
 
@@ -44,7 +52,7 @@ export default function LoginScreen({ onLogin }) {
           name: foundUser.name,
           role: foundUser.role,
           // Gera o avatar automaticamente com as iniciais
-          avatar: `https://ui-avatars.com/api/?name=${foundUser.name}&background=0D8ABC&color=fff`
+          avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(foundUser.name)}&background=0D8ABC&color=fff`
         });
       } else {
         setError('Acesso negado. Verifique suas credenciais.');
@@ -72,8 +80,8 @@ export default function LoginScreen({ onLogin }) {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">E-mail Corporativo</label>
-              <input 
-                type="email" 
+              <input
+                type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
@@ -82,8 +90,8 @@ export default function LoginScreen({ onLogin }) {
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Senha de Acesso</label>
-              <input 
-                type="password" 
+              <input
+                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
@@ -97,7 +105,7 @@ export default function LoginScreen({ onLogin }) {
               </div>
             )}
 
-            <button 
+            <button
               type="submit"
               disabled={isLoading}
               className="w-full py-4 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
@@ -110,7 +118,7 @@ export default function LoginScreen({ onLogin }) {
             </button>
           </form>
         </div>
-        
+
         <p className="text-center mt-8 text-slate-600 text-xs">
           Protegido por OmniDesk Security &bull; 2026
         </p>
